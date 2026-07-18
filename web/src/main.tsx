@@ -15,6 +15,6 @@ if (rootElement) {
 } else {
   document.body.insertAdjacentHTML(
     "afterbegin",
-    '<main class="boot-diagnostics" role="alert"><strong>和爸爸一起读 · 启动诊断</strong><p>Missing app root. Please refresh the widget.</p><dl><div><dt>resourceVersion</dt><dd>app-v21</dd></div><div><dt>bootStage</dt><dd>missing-root</dd></div></dl></main>'
+    '<main class="boot-diagnostics" role="alert"><strong>和爸爸一起读 · 启动诊断</strong><p>Missing app root. Please refresh the widget.</p><dl><div><dt>resourceVersion</dt><dd>reading-nest-v4</dd></div><div><dt>bootStage</dt><dd>missing-root</dd></div></dl></main>'
   );
 }

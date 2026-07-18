@@ -1,12 +1,14 @@
 import { registerAppResource, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { READING_NEST_URI } from "./register-tools.js";
+import { buildRemoteWidgetHtml } from "./widget-assets.js";
 
 export function registerReadingResource(server: McpServer, widgetHtml: string, workerOrigin?: string) {
   const connectDomains = [
     workerOrigin ?? "http://localhost:8787"
   ];
   const resourceDomains = [
+    ...(workerOrigin?.startsWith("https://") ? [workerOrigin] : []),
     "https://www.gutenberg.org",
     "https://gutenberg.org"
   ];
@@ -19,7 +21,9 @@ export function registerReadingResource(server: McpServer, widgetHtml: string, w
     resource_domains: resourceDomains
   };
   const widgetDomain = workerOrigin?.startsWith("https://") ? workerOrigin : undefined;
-  const resourceHtml = injectWorkerOrigin(widgetHtml, widgetDomain);
+  const resourceHtml = widgetDomain
+    ? buildRemoteWidgetHtml(widgetHtml, widgetDomain)
+    : injectWorkerOrigin(widgetHtml);
   registerAppResource(
     server,
     "和爸爸一起读",
@@ -64,11 +68,6 @@ export function registerReadingResource(server: McpServer, widgetHtml: string, w
   );
 }
 
-function injectWorkerOrigin(widgetHtml: string, workerOrigin?: string) {
-  if (!workerOrigin) return widgetHtml;
-  const escapedOrigin = workerOrigin.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-  const meta = `<meta name="ss-worker-origin" content="${escapedOrigin}">`;
-  return /<\/head>/i.test(widgetHtml)
-    ? widgetHtml.replace(/<\/head>/i, `${meta}</head>`)
-    : `${meta}${widgetHtml}`;
+function injectWorkerOrigin(widgetHtml: string) {
+  return widgetHtml;
 }

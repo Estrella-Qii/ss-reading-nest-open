@@ -13,6 +13,13 @@ describe("getWorkerRoute", () => {
       .toBe("public-domain");
   });
 
+  it("serves versioned public UI assets without exposing private reading data", () => {
+    expect(getWorkerRoute(new URL("https://example.workers.dev/app-assets/reading-nest-v4.js"), undefined))
+      .toBe("app-asset");
+    expect(getWorkerRoute(new URL("https://example.workers.dev/app-assets/private.txt"), "secret"))
+      .toBe("app-asset");
+  });
+
   it("accepts only the exact private MCP path", () => {
     expect(getWorkerRoute(new URL("https://example.workers.dev/mcp/secret"), "secret")).toBe("mcp");
     expect(getWorkerRoute(new URL("https://example.workers.dev/mcp/wrong"), "secret")).toBe("not-found");

@@ -7,6 +7,7 @@ import { handleSourceRoute } from "./source-routes.js";
 import { R2SourceObjectStorage } from "./storage/r2-source-object-storage.js";
 import { getWorkerRoute } from "./worker-router.js";
 import { handlePublicDomainRoute } from "./public-domain-routes.js";
+import { getWidgetAsset } from "./mcp/widget-assets.js";
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
@@ -18,6 +19,17 @@ export default {
     }
     if (route === "public-domain") {
       return handlePublicDomainRoute(request);
+    }
+    if (route === "app-asset") {
+      const asset = getWidgetAsset(url.pathname, widgetHtml);
+      if (!asset) return new Response("Not found", { status: 404 });
+      return new Response(asset.body, {
+        headers: {
+          "Content-Type": asset.contentType,
+          "Cache-Control": "public, max-age=31536000, immutable",
+          "Access-Control-Allow-Origin": "*"
+        }
+      });
     }
     if (route === "misconfigured") {
       console.error(JSON.stringify({ message: "MCP_PATH_TOKEN is not configured" }));
