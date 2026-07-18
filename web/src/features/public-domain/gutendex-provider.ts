@@ -1,6 +1,6 @@
 import type { PublicDomainBook, PublicDomainBookProvider } from "./provider.js";
 
-const SEARCH_TIMEOUT_MS = 10_000;
+const SEARCH_TIMEOUT_MS = 20_000;
 const DOWNLOAD_TIMEOUT_MS = 25_000;
 
 export class GutendexPublicDomainProvider implements PublicDomainBookProvider {

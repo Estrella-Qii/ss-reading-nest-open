@@ -72,6 +72,7 @@ import { MangaReader, type MangaPage } from "./pages/MangaReader.js";
 import { NovelReader, type NovelSelection } from "./pages/NovelReader.js";
 import { PublicDomainLibrary } from "./pages/PublicDomainLibrary.js";
 import { GutendexPublicDomainProvider } from "./features/public-domain/gutendex-provider.js";
+import { derivePublicDomainEndpointBase } from "./features/public-domain/endpoint.js";
 import type { PublicDomainBook } from "./features/public-domain/provider.js";
 import { IndexedDbReadingCache } from "./storage/indexeddb-cache.js";
 
@@ -2567,10 +2568,6 @@ function deriveSourceEndpointBase(): string {
   const match = window.location.pathname.match(/\/mcp\/([^/]+)/);
   if (!match) return "/source";
   return `/source/${match[1]}`;
-}
-
-function derivePublicDomainEndpointBase(): string {
-  return "/public-domain";
 }
 
 function buildLiveReadingOperationId(

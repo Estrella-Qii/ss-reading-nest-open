@@ -15,8 +15,8 @@ describe("registerReadingResource", () => {
     registerReadingResource({} as never, "<html></html>", "https://reading-nest.example.workers.dev");
     const [, , uri, descriptor, loader] = registerAppResource.mock.calls[0];
 
-    expect(READING_NEST_URI).toBe("ui://ss-reading-nest/app-v20.html");
-    expect(uri).toBe("ui://ss-reading-nest/app-v20.html");
+    expect(READING_NEST_URI).toBe("ui://ss-reading-nest/app-v21.html");
+    expect(uri).toBe("ui://ss-reading-nest/app-v21.html");
     expect(descriptor._meta.ui.csp.connectDomains).toContain(
       "https://reading-nest.example.workers.dev"
     );
@@ -28,7 +28,10 @@ describe("registerReadingResource", () => {
     expect(descriptor._meta.ui.csp.connectDomains).not.toContain("https://gutendex.com");
 
     const loaded = await loader();
-    expect(loaded.contents[0].uri).toBe("ui://ss-reading-nest/app-v20.html");
+    expect(loaded.contents[0].uri).toBe("ui://ss-reading-nest/app-v21.html");
+    expect(loaded.contents[0].text).toContain(
+      '<meta name="ss-worker-origin" content="https://reading-nest.example.workers.dev">'
+    );
     expect(loaded.contents[0]._meta.ui.csp.connectDomains).toContain(
       "https://reading-nest.example.workers.dev"
     );

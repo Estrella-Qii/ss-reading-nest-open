@@ -19,6 +19,7 @@ export function registerReadingResource(server: McpServer, widgetHtml: string, w
     resource_domains: resourceDomains
   };
   const widgetDomain = workerOrigin?.startsWith("https://") ? workerOrigin : undefined;
+  const resourceHtml = injectWorkerOrigin(widgetHtml, widgetDomain);
   registerAppResource(
     server,
     "和爸爸一起读",
@@ -43,7 +44,7 @@ export function registerReadingResource(server: McpServer, widgetHtml: string, w
           {
             uri: READING_NEST_URI,
             mimeType: RESOURCE_MIME_TYPE,
-            text: widgetHtml,
+            text: resourceHtml,
             _meta: {
               ui: {
                 csp: resourceCsp,
@@ -61,4 +62,13 @@ export function registerReadingResource(server: McpServer, widgetHtml: string, w
       };
     }
   );
+}
+
+function injectWorkerOrigin(widgetHtml: string, workerOrigin?: string) {
+  if (!workerOrigin) return widgetHtml;
+  const escapedOrigin = workerOrigin.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  const meta = `<meta name="ss-worker-origin" content="${escapedOrigin}">`;
+  return /<\/head>/i.test(widgetHtml)
+    ? widgetHtml.replace(/<\/head>/i, `${meta}</head>`)
+    : `${meta}${widgetHtml}`;
 }

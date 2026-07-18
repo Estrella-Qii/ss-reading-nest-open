@@ -28,7 +28,7 @@ type GutendexBook = {
 type GutendexResponse = { results?: GutendexBook[] };
 
 const MAX_PUBLIC_DOMAIN_TEXT_BYTES = 8 * 1024 * 1024;
-const SEARCH_TIMEOUT_MS = 8_000;
+const SEARCH_TIMEOUT_MS = 15_000;
 const DOWNLOAD_TIMEOUT_MS = 20_000;
 
 export class PublicDomainProviderError extends Error {
