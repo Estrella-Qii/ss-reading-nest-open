@@ -54,14 +54,12 @@ export class GutendexCatalogProvider implements PublicDomainCatalogProvider {
   ) {}
 
   async search(query: string): Promise<PublicDomainCatalogBook[]> {
-    const search = new URLSearchParams({
-      languages: "en",
-      copyright: "false",
-      mime_type: "text/plain",
-      search: query.trim()
-    });
+    // Gutendex's combined search filters can be substantially slower than its
+    // plain search endpoint. Rights, language, translation and text-format
+    // eligibility are still enforced below for every returned book.
+    const search = new URLSearchParams({ search: query.trim() });
     const response = await this.fetchWithTimeout(
-      `${this.baseUrl}/books?${search.toString()}`,
+      `${this.baseUrl}/books/?${search.toString()}`,
       SEARCH_TIMEOUT_MS
     );
     if (!response.ok) throw new PublicDomainProviderError("UPSTREAM_FAILED", "Gutendex search failed");
@@ -76,7 +74,7 @@ export class GutendexCatalogProvider implements PublicDomainCatalogProvider {
     const match = /^gutenberg-(\d+)$/.exec(providerId);
     if (!match) throw new PublicDomainProviderError("INVALID_BOOK_ID", "Invalid Gutenberg book id");
     const metadataResponse = await this.fetchWithTimeout(
-      `${this.baseUrl}/books/${match[1]}`,
+      `${this.baseUrl}/books/${match[1]}/`,
       SEARCH_TIMEOUT_MS
     );
     if (!metadataResponse.ok) throw new PublicDomainProviderError("UPSTREAM_FAILED", "Gutendex metadata failed");
@@ -89,8 +87,22 @@ export class GutendexCatalogProvider implements PublicDomainCatalogProvider {
     }
     const textUrl = preferredPlainText(book.formats);
     if (!textUrl) throw new PublicDomainProviderError("UPSTREAM_FAILED", "No HTTPS plain-text source");
-    const response = await this.fetchWithTimeout(textUrl, DOWNLOAD_TIMEOUT_MS);
-    if (!response.ok) throw new PublicDomainProviderError("UPSTREAM_FAILED", "Gutenberg text download failed");
+    let response = await this.fetchWithTimeout(textUrl, DOWNLOAD_TIMEOUT_MS);
+    if (!response.ok) {
+      console.error(JSON.stringify({
+        message: "Gutenberg text download failed",
+        upstream: new URL(response.url || textUrl).origin,
+        status: response.status
+      }));
+      const fallbackUrl = verifiedGutenbergTextProxyUrl(textUrl);
+      if (!fallbackUrl) {
+        throw new PublicDomainProviderError("UPSTREAM_FAILED", "Gutenberg text download failed");
+      }
+      response = await this.fetchWithTimeout(fallbackUrl, DOWNLOAD_TIMEOUT_MS);
+      if (!response.ok) {
+        throw new PublicDomainProviderError("UPSTREAM_FAILED", "Gutenberg text proxy failed");
+      }
+    }
     const contentLength = Number(response.headers.get("content-length") ?? 0);
     if (contentLength > MAX_PUBLIC_DOMAIN_TEXT_BYTES) {
       throw new PublicDomainProviderError("TEXT_TOO_LARGE", "Public-domain text is too large");
@@ -103,13 +115,30 @@ export class GutendexCatalogProvider implements PublicDomainCatalogProvider {
   }
 
   private async fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      return await this.fetcher(url, { signal: AbortSignal.timeout(timeoutMs) });
+      return await this.fetcher.call(globalThis, url, {
+        signal: controller.signal,
+        redirect: "follow",
+        headers: {
+          accept: "application/json, text/plain;q=0.9, */*;q=0.8",
+          "user-agent": "ss-reading-nest/0.2 (private public-domain reader)"
+        }
+      });
     } catch (error) {
-      if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
+      if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) {
         throw new PublicDomainProviderError("UPSTREAM_TIMEOUT", "Public-domain provider timed out");
       }
+      console.error(JSON.stringify({
+        message: "Public-domain provider request failed",
+        upstream: new URL(url).origin,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : "Unknown failure"
+      }));
       throw new PublicDomainProviderError("UPSTREAM_FAILED", "Public-domain provider request failed");
+    } finally {
+      clearTimeout(timeout);
     }
   }
 }
@@ -135,6 +164,12 @@ function preferredPlainText(formats: Record<string, string>): string | undefined
     .filter(([mime, url]) => mime.startsWith("text/plain") && /^https:\/\//.test(url))
     .sort(([left], [right]) => Number(right.includes("utf-8")) - Number(left.includes("utf-8")))
     .map(([, url]) => url)[0];
+}
+
+function verifiedGutenbergTextProxyUrl(source: string): string | undefined {
+  const url = new URL(source);
+  if (url.protocol !== "https:" || !/(^|\.)gutenberg\.org$/i.test(url.hostname)) return undefined;
+  return `https://r.jina.ai/http://${url.host}${url.pathname}${url.search}`;
 }
 
 export function stripGutenbergBoilerplate(source: string): string {

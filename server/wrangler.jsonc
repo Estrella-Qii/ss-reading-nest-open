@@ -13,7 +13,7 @@
     {
       "binding": "DB",
       "database_name": "ss-reading-nest-db",
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "database_id": "2c69227a-a9fa-4aec-9928-18c77bbe2891",
       "migrations_dir": "./migrations"
     }
   ],

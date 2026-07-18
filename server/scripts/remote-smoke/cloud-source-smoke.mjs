@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { splitNovelTextForVersion } from "@ss/shared";
 
 const endpoint = process.env.MCP_ENDPOINT;
 const workerUrl = buildWorkerUrl();
@@ -49,6 +50,10 @@ const expectedTools = [
   "publish_companion_comment",
   "list_companion_comments",
   "clear_companion_comments",
+  "create_annotation",
+  "list_annotations",
+  "update_annotation",
+  "delete_annotation",
   "rename_reading_session",
   "set_reading_session_status",
   "delete_reading_session",
@@ -139,13 +144,20 @@ try {
   assert(novelManifest.cloudSync.manifestObjectKey, "novel manifestObjectKey missing");
 
   let state = await readD1State();
-  assert(state.schemaVersion === 4, `schemaVersion expected 4, got ${state.schemaVersion}`);
+  assert(state.schemaVersion === 5, `schemaVersion expected 5, got ${state.schemaVersion}`);
   assert(JSON.stringify(state).includes(novelManifest.cloudSync.objectKey), "D1 missing novel objectKey metadata");
   assertNoForbidden(JSON.stringify(state), "D1 after novel upload");
 
   const novelRestore = await componentPost("restore", { sessionId: novelSession.id });
   assert(novelRestore.sourceText === novelText, "novel restore text mismatch");
-  assert(novelRestore.sourceManifest.paragraphCount === 2, "novel paragraphCount mismatch");
+  const expectedParagraphCount = splitNovelTextForVersion(
+    novelText,
+    novelRestore.sourceManifest.segmentationVersion
+  ).length;
+  assert(
+    novelRestore.sourceManifest.paragraphCount === expectedParagraphCount,
+    `novel paragraphCount expected ${expectedParagraphCount}, got ${novelRestore.sourceManifest.paragraphCount}`
+  );
   assert(sha256Text(novelRestore.sourceText) === novelManifest.contentHash, "novel restore hash mismatch");
   assert(!("structuredContent" in novelRestore), "component restore must not look like MCP tool result");
 
@@ -406,8 +418,10 @@ async function cleanupAll() {
 }
 
 function runWrangler(args) {
-  if (process.env.WRANGLER_JS_PATH) {
-    return spawnSync(process.execPath, [process.env.WRANGLER_JS_PATH, ...args], {
+  const wranglerJsPath =
+    process.env.WRANGLER_JS_PATH ?? join(serverDir, "node_modules", "wrangler", "bin", "wrangler.js");
+  if (existsSync(wranglerJsPath)) {
+    return spawnSync(process.execPath, [wranglerJsPath, ...args], {
       cwd: serverDir,
       encoding: "utf8"
     });
