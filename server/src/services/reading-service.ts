@@ -5,6 +5,8 @@ import {
   MAX_RECENT_COMPANION_COMMENTS
 } from "@ss/shared";
 import type {
+  Annotation,
+  AnnotationAuthor,
   Bookmark,
   CommentLength,
   CompanionComment,
@@ -101,8 +103,187 @@ export class ReadingService {
       session,
       quotes: database.quotes.filter((quote) => quote.sessionId === sessionId),
       reactions: database.reactions.filter((reaction) => reaction.sessionId === sessionId),
-      bookmarks: database.bookmarks.filter((bookmark) => bookmark.sessionId === sessionId)
+      bookmarks: database.bookmarks.filter((bookmark) => bookmark.sessionId === sessionId),
+      annotations: (database.annotations ?? []).filter(
+        (annotation) => annotation.sessionId === sessionId
+      )
     };
+  }
+
+  async createAnnotation(input: {
+    sessionId: string;
+    paragraphIndex: number;
+    selectedText: string;
+    startOffset: number;
+    endOffset: number;
+    author: AnnotationAuthor;
+    note: string;
+    color: string;
+    sourceHash: string;
+    segmentationVersion: number;
+    operationId: string;
+  }): Promise<Annotation> {
+    this.validateAnnotationRange(input);
+    return this.repository.mutate((database) => {
+      database.annotations ??= [];
+      database.annotationOperations ??= [];
+      const session = this.requireSession(database.sessions, input.sessionId);
+      this.assertAnnotationSource(session, input);
+      const priorOperation = database.annotationOperations.find(
+        (operation) =>
+          operation.sessionId === input.sessionId &&
+          operation.operationId === input.operationId
+      );
+      if (priorOperation) {
+        if (priorOperation.kind !== "create" || !priorOperation.annotation) {
+          throw new AppError("INVALID_OPERATION", "operationId 已用于另一项批注写操作。");
+        }
+        return structuredClone(priorOperation.annotation);
+      }
+      const annotation: Annotation = {
+        id: this.deps.id(),
+        sessionId: input.sessionId,
+        paragraphIndex: input.paragraphIndex,
+        selectedText: input.selectedText,
+        startOffset: input.startOffset,
+        endOffset: input.endOffset,
+        author: input.author,
+        note: input.note,
+        color: input.color,
+        createdAt: this.deps.now().toISOString(),
+        operationId: input.operationId,
+        sourceHash: input.sourceHash,
+        segmentationVersion: input.segmentationVersion
+      };
+      database.annotations.push(annotation);
+      database.annotationOperations.push({
+        operationId: input.operationId,
+        sessionId: input.sessionId,
+        kind: "create",
+        annotationId: annotation.id,
+        annotation: structuredClone(annotation)
+      });
+      return structuredClone(annotation);
+    });
+  }
+
+  async listAnnotations(input: {
+    sessionId: string;
+    paragraphIndex?: number;
+    author?: AnnotationAuthor;
+    sourceHash: string;
+    segmentationVersion: number;
+  }): Promise<{ annotations: Annotation[] }> {
+    const database = await this.repository.read();
+    const session = this.requireSession(database.sessions, input.sessionId);
+    this.assertAnnotationSource(session, input);
+    return {
+      annotations: (database.annotations ?? [])
+        .filter(
+          (annotation) =>
+            annotation.sessionId === input.sessionId &&
+            (input.paragraphIndex === undefined ||
+              annotation.paragraphIndex === input.paragraphIndex) &&
+            (input.author === undefined || annotation.author === input.author)
+        )
+        .sort(
+          (left, right) =>
+            left.paragraphIndex - right.paragraphIndex ||
+            left.startOffset - right.startOffset ||
+            left.createdAt.localeCompare(right.createdAt)
+        )
+        .map((annotation) => structuredClone(annotation))
+    };
+  }
+
+  async updateAnnotation(input: {
+    sessionId: string;
+    annotationId: string;
+    note?: string;
+    color?: string;
+    sourceHash: string;
+    segmentationVersion: number;
+    operationId: string;
+  }): Promise<Annotation> {
+    return this.repository.mutate((database) => {
+      database.annotations ??= [];
+      database.annotationOperations ??= [];
+      const session = this.requireSession(database.sessions, input.sessionId);
+      this.assertAnnotationSource(session, input);
+      const priorOperation = database.annotationOperations.find(
+        (operation) =>
+          operation.sessionId === input.sessionId &&
+          operation.operationId === input.operationId
+      );
+      if (priorOperation) {
+        if (priorOperation.kind !== "update" || !priorOperation.annotation) {
+          throw new AppError("INVALID_OPERATION", "operationId 已用于另一项批注写操作。");
+        }
+        return structuredClone(priorOperation.annotation);
+      }
+      const annotation = database.annotations.find(
+        (item) => item.id === input.annotationId && item.sessionId === input.sessionId
+      );
+      if (!annotation) throw new AppError("INVALID_OPERATION", "找不到这条正文批注。");
+      if (input.note !== undefined) annotation.note = input.note;
+      if (input.color !== undefined) annotation.color = input.color;
+      annotation.updatedAt = this.deps.now().toISOString();
+      database.annotationOperations.push({
+        operationId: input.operationId,
+        sessionId: input.sessionId,
+        kind: "update",
+        annotationId: annotation.id,
+        annotation: structuredClone(annotation)
+      });
+      return structuredClone(annotation);
+    });
+  }
+
+  async deleteAnnotation(input: {
+    sessionId: string;
+    annotationId: string;
+    sourceHash: string;
+    segmentationVersion: number;
+    operationId: string;
+  }): Promise<{ annotationId: string; deleted: boolean; operationId: string }> {
+    return this.repository.mutate((database) => {
+      database.annotations ??= [];
+      database.annotationOperations ??= [];
+      const session = this.requireSession(database.sessions, input.sessionId);
+      this.assertAnnotationSource(session, input);
+      const priorOperation = database.annotationOperations.find(
+        (operation) =>
+          operation.sessionId === input.sessionId &&
+          operation.operationId === input.operationId
+      );
+      if (priorOperation) {
+        if (priorOperation.kind !== "delete") {
+          throw new AppError("INVALID_OPERATION", "operationId 已用于另一项批注写操作。");
+        }
+        return {
+          annotationId: priorOperation.annotationId,
+          deleted: priorOperation.deleted ?? false,
+          operationId: priorOperation.operationId
+        };
+      }
+      const before = database.annotations.length;
+      database.annotations = (database.annotations ?? []).filter(
+        (item) => !(item.id === input.annotationId && item.sessionId === input.sessionId)
+      );
+      const result = {
+        annotationId: input.annotationId,
+        deleted: database.annotations.length < before,
+        operationId: input.operationId
+      };
+      database.annotationOperations.push({
+        operationId: input.operationId,
+        sessionId: input.sessionId,
+        kind: "delete",
+        annotationId: input.annotationId,
+        deleted: result.deleted
+      });
+      return result;
+    });
   }
 
   async updateUserPosition(
@@ -130,13 +311,13 @@ export class ReadingService {
         throw new AppError("INVALID_OPERATION", "确认位置类型与当前阅读位置不一致。");
       }
       if (input.confirmedPosition.index > session.userCurrentPosition.index) {
-        throw new AppError("INVALID_OPERATION", "不能确认烁构读到了用户尚未读到的位置。");
+        throw new AppError("INVALID_OPERATION", "不能确认 Elias 读到了小辞尚未读到的位置。");
       }
       if (
         session.assistantSyncedPosition &&
         input.confirmedPosition.index < session.assistantSyncedPosition.index
       ) {
-        throw new AppError("INVALID_OPERATION", "烁构确认位置不能倒退。");
+        throw new AppError("INVALID_OPERATION", "Elias 的确认位置不能倒退。");
       }
       const now = this.deps.now().toISOString();
       session.assistantSyncedPosition = input.confirmedPosition;
@@ -498,6 +679,12 @@ export class ReadingService {
       database.companionComments = database.companionComments.filter(
         (item) => item.sessionId !== sessionId
       );
+      database.annotations = database.annotations.filter(
+        (item) => item.sessionId !== sessionId
+      );
+      database.annotationOperations = (database.annotationOperations ?? []).filter(
+        (item) => item.sessionId !== sessionId
+      );
       return {
         sessionId,
         deleted: true,
@@ -546,6 +733,45 @@ export class ReadingService {
       input.text !== "已生成长评，可回聊天区查看。"
     ) {
       throw new AppError("INVALID_OPERATION", "深度分析正文不能保存为陪读短评。");
+    }
+  }
+
+  private validateAnnotationRange(input: {
+    paragraphIndex: number;
+    selectedText: string;
+    startOffset: number;
+    endOffset: number;
+  }) {
+    if (!Number.isInteger(input.paragraphIndex) || input.paragraphIndex < 1) {
+      throw new AppError("INVALID_OPERATION", "批注段落位置无效。");
+    }
+    if (
+      !Number.isInteger(input.startOffset) ||
+      !Number.isInteger(input.endOffset) ||
+      input.startOffset < 0 ||
+      input.endOffset <= input.startOffset ||
+      input.endOffset - input.startOffset !== input.selectedText.length
+    ) {
+      throw new AppError("INVALID_OPERATION", "批注字符范围与所选原文不一致。");
+    }
+  }
+
+  private assertAnnotationSource(
+    session: ReadingSession,
+    input: { sourceHash: string; segmentationVersion: number }
+  ) {
+    const manifest = session.sourceManifest;
+    if (!manifest) {
+      throw new AppError("INVALID_OPERATION", "正文来源尚未校验，不能安全应用批注。");
+    }
+    if (
+      manifest.contentHash !== input.sourceHash ||
+      manifest.segmentationVersion !== input.segmentationVersion
+    ) {
+      throw new AppError(
+        "INVALID_OPERATION",
+        "正文 hash 或分段版本不匹配，已拒绝应用批注以避免错位。"
+      );
     }
   }
 

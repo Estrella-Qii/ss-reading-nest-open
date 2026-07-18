@@ -37,6 +37,13 @@ export const companionCommentSourceSchema = z.enum([
   "current_context",
   "manual_save"
 ]);
+export const annotationAuthorSchema = z.enum(["xiaoci", "elias"]);
+export const annotationSourceGuardSchema = z
+  .object({
+    sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    segmentationVersion: z.number().int().min(1)
+  })
+  .strict();
 export const readingPositionSchema = z.object({
   kind: z.enum(["paragraph", "page"]),
   index: z.number().int().min(1),
@@ -145,6 +152,16 @@ export const sendCurrentContextInputSchema = z
     includedText: z.string().max(20_000).optional(),
     currentText: z.string().max(20_000).optional(),
     selectedText: z.string().max(10_000).optional(),
+    selectedRange: z
+      .object({
+        paragraphIndex: z.number().int().min(1),
+        startOffset: z.number().int().min(0),
+        endOffset: z.number().int().min(1),
+        contextBefore: z.string().max(2_000),
+        contextAfter: z.string().max(2_000)
+      })
+      .strict()
+      .optional(),
     pageDescription: z.string().max(4_000).optional(),
     userNote: z.string().max(4_000).optional(),
     currentPageImage: fileReferenceSchema.optional(),
@@ -166,6 +183,21 @@ export const sendCurrentContextInputSchema = z
   .strict()
   .refine((input) => input.currentPosition || input.position, {
     message: "currentPosition is required"
+  })
+  .superRefine((input, context) => {
+    if (
+      input.selectedRange &&
+      (input.selectedText === undefined ||
+        input.selectedRange.endOffset <= input.selectedRange.startOffset ||
+        input.selectedRange.endOffset - input.selectedRange.startOffset !==
+          input.selectedText.length)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["selectedRange"],
+        message: "selectedRange must exactly match selectedText"
+      });
+    }
   });
 export const confirmAssistantSyncedPositionInputSchema = z.object({
   sessionId: sessionIdSchema,
@@ -333,6 +365,77 @@ export const completeReadingSessionInputSchema = z.object({
 export const generateDiaryContextInputSchema = z.object({
   sessionId: sessionIdSchema
 });
+
+const annotationRangeShape = {
+  paragraphIndex: z.number().int().min(1),
+  selectedText: z.string().min(1).max(20_000),
+  startOffset: z.number().int().min(0),
+  endOffset: z.number().int().min(1)
+};
+
+export const createAnnotationInputSchema = z
+  .object({
+    sessionId: sessionIdSchema,
+    ...annotationRangeShape,
+    author: annotationAuthorSchema,
+    note: z.string().trim().max(4_000),
+    color: z.string().trim().min(1).max(40),
+    sourceHash: annotationSourceGuardSchema.shape.sourceHash,
+    segmentationVersion: annotationSourceGuardSchema.shape.segmentationVersion,
+    operationId: z.string().min(1).max(200)
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if (input.endOffset <= input.startOffset) {
+      context.addIssue({
+        code: "custom",
+        path: ["endOffset"],
+        message: "endOffset must be greater than startOffset"
+      });
+    }
+    if (input.endOffset - input.startOffset !== input.selectedText.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["selectedText"],
+        message: "selectedText length must match the annotation range"
+      });
+    }
+  });
+
+export const listAnnotationsInputSchema = z
+  .object({
+    sessionId: sessionIdSchema,
+    paragraphIndex: z.number().int().min(1).optional(),
+    author: annotationAuthorSchema.optional(),
+    sourceHash: annotationSourceGuardSchema.shape.sourceHash,
+    segmentationVersion: annotationSourceGuardSchema.shape.segmentationVersion
+  })
+  .strict();
+
+export const updateAnnotationInputSchema = z
+  .object({
+    sessionId: sessionIdSchema,
+    annotationId: z.string().min(1).max(200),
+    note: z.string().trim().max(4_000).optional(),
+    color: z.string().trim().min(1).max(40).optional(),
+    sourceHash: annotationSourceGuardSchema.shape.sourceHash,
+    segmentationVersion: annotationSourceGuardSchema.shape.segmentationVersion,
+    operationId: z.string().min(1).max(200)
+  })
+  .strict()
+  .refine((input) => input.note !== undefined || input.color !== undefined, {
+    message: "At least one editable field is required"
+  });
+
+export const deleteAnnotationInputSchema = z
+  .object({
+    sessionId: sessionIdSchema,
+    annotationId: z.string().min(1).max(200),
+    sourceHash: annotationSourceGuardSchema.shape.sourceHash,
+    segmentationVersion: annotationSourceGuardSchema.shape.segmentationVersion,
+    operationId: z.string().min(1).max(200)
+  })
+  .strict();
 
 export type SendCurrentContextInput = z.infer<typeof sendCurrentContextInputSchema>;
 export type UploadCloudSourceInput = z.infer<typeof uploadCloudSourceInputSchema>;

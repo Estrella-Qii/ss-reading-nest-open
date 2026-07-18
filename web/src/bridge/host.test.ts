@@ -58,12 +58,12 @@ describe("host bridge", () => {
     const { askChatGpt, requestReaderFullscreen } = await import("./host.js");
 
     await expect(requestReaderFullscreen()).resolves.toBe(true);
-    await askChatGpt("陪我看看这里", { scrollToBottom: false });
+    await askChatGpt("叫 Elias 看这里", { scrollToBottom: false });
 
     expect(bridge.requestDisplayMode).toHaveBeenCalledWith({ mode: "fullscreen" });
     expect(bridge.sendMessage).toHaveBeenCalledWith({
       role: "user",
-      content: [{ type: "text", text: "陪我看看这里" }]
+      content: [{ type: "text", text: "叫 Elias 看这里" }]
     });
   });
 

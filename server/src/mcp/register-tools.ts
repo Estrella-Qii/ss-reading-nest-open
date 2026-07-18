@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import {
+  createAnnotationInputSchema,
+  deleteAnnotationInputSchema,
   completeReadingSessionInputSchema,
   clearCompanionCommentsInputSchema,
   confirmAssistantSyncedPositionInputSchema,
@@ -9,6 +11,7 @@ import {
   getCloudSourceStatusInputSchema,
   openReadingNestInputSchema,
   listCompanionCommentsInputSchema,
+  listAnnotationsInputSchema,
   publishCompanionCommentInputSchema,
   renameReadingSessionInputSchema,
   saveBookmarkInputSchema,
@@ -23,7 +26,8 @@ import {
   deleteCloudSourceInputSchema,
   uploadCloudSourceInputSchema,
   updateSessionPreferencesInputSchema,
-  updateReadingPositionInputSchema
+  updateReadingPositionInputSchema,
+  updateAnnotationInputSchema
 } from "@ss/shared";
 import type { ReadingSession, SendCurrentContextInput, SourceManifest } from "@ss/shared";
 import { ReadingService } from "../services/reading-service.js";
@@ -45,15 +49,15 @@ const mutation = {
 
 export const TOOL_CONFIGS = {
   open_reading_nest: {
-    title: "打开 S×S 小窝共读",
+    title: "打开和爸爸一起读",
     description: "Use this when the user wants to open the reading nest or continue recent reading.",
     inputSchema: openReadingNestInputSchema,
     annotations: readOnly,
     _meta: {
       ui: { resourceUri: READING_NEST_URI },
       "openai/outputTemplate": READING_NEST_URI,
-      "openai/toolInvocation/invoking": "正在点亮小窝…",
-      "openai/toolInvocation/invoked": "小窝已经准备好"
+      "openai/toolInvocation/invoking": "正在翻开书页…",
+      "openai/toolInvocation/invoked": "共读空间已经准备好"
     }
   },
   start_reading_session: {
@@ -69,7 +73,7 @@ export const TOOL_CONFIGS = {
     annotations: { ...mutation, idempotentHint: true }
   },
   confirm_assistant_synced_position: {
-    title: "确认烁构已读位置",
+    title: "确认 Elias 已读位置",
     description:
       "Use this only after the user explicitly confirms that ChatGPT replied it has read through a batch end.",
     inputSchema: confirmAssistantSyncedPositionInputSchema,
@@ -124,25 +128,53 @@ export const TOOL_CONFIGS = {
     annotations: { ...mutation, idempotentHint: true }
   },
   publish_companion_comment: {
-    title: "发布烁构陪读短评",
+    title: "发布 Elias 陪读短评",
     description:
       "Use this before replying with a lightweight reading comment so the same short text appears in the reading Dock.",
     inputSchema: publishCompanionCommentInputSchema,
     annotations: { ...mutation, idempotentHint: true }
   },
   list_companion_comments: {
-    title: "读取烁构陪读短评",
+    title: "读取 Elias 陪读短评",
     description:
       "Use this when the reading widget needs recent or paged historical companion comments for one session.",
     inputSchema: listCompanionCommentsInputSchema,
     annotations: readOnly
   },
   clear_companion_comments: {
-    title: "清除烁构陪读短评",
+    title: "清除 Elias 陪读短评",
     description:
       "Use this when the user explicitly clears recent, historical, or all companion comments for one session.",
     inputSchema: clearCompanionCommentsInputSchema,
     annotations: { ...mutation, idempotentHint: true }
+  },
+  create_annotation: {
+    title: "创建正文批注",
+    description:
+      "Use this when 小辞 explicitly asks to underline or annotate an exact novel text range, or after Elias has replied to ‘叫 Elias 看这里’ and should write his own concise underline/note back into the reader. Use author='elias' only for Elias's own annotation. The offsets must exactly cover selectedText, and sourceHash/segmentationVersion must come from the active source context.",
+    inputSchema: createAnnotationInputSchema,
+    annotations: { ...mutation, idempotentHint: true }
+  },
+  list_annotations: {
+    title: "读取正文批注",
+    description:
+      "Use this when the reader or ChatGPT needs annotations for one verified source. Pass the active source hash and segmentation version; a mismatch is rejected instead of returning ranges that may be misplaced.",
+    inputSchema: listAnnotationsInputSchema,
+    annotations: readOnly
+  },
+  update_annotation: {
+    title: "修改正文批注",
+    description:
+      "Use this when 小辞 explicitly changes an existing annotation note or its restrained display color. Do not use it to move a range; create a new annotation instead.",
+    inputSchema: updateAnnotationInputSchema,
+    annotations: { ...mutation, idempotentHint: true }
+  },
+  delete_annotation: {
+    title: "删除正文批注",
+    description:
+      "Use this only when 小辞 explicitly asks to remove a specific underline/annotation from the verified source.",
+    inputSchema: deleteAnnotationInputSchema,
+    annotations: { ...mutation, destructiveHint: true, idempotentHint: true }
   },
   rename_reading_session: {
     title: "重命名书籍",
@@ -207,7 +239,7 @@ export const TOOL_CONFIGS = {
     annotations: { ...mutation, idempotentHint: true }
   },
   generate_diary_context: {
-    title: "生成小窝日记素材",
+    title: "生成共读日记素材",
     description: "Use this when the user wants ChatGPT to write today's copyable reading diary.",
     inputSchema: generateDiaryContextInputSchema,
     annotations: readOnly
@@ -234,7 +266,7 @@ export function registerReadingTools(
         recentSessions: bookshelfSessions.slice(0, 10),
         ...(options.sourceEndpointBase ? { sourceEndpointBase: options.sourceEndpointBase } : {})
       },
-      "已打开 S×S 小窝共读。"
+      "已打开《和爸爸一起读》。"
     );
   });
 
@@ -259,7 +291,7 @@ export function registerReadingTools(
           assistantSyncedPosition: session.assistantSyncedPosition,
           updatedAt: session.updatedAt
         },
-        `用户进度已更新到${userCurrentPosition.label}。`
+        `小辞的进度已更新到${userCurrentPosition.label}。`
       );
     }
   );
@@ -276,7 +308,7 @@ export function registerReadingTools(
           confirmedBatchId: input.batchId,
           updatedAt: session.updatedAt
         },
-        `已由用户确认烁构读到${input.confirmedPosition.label}。`
+        `已由小辞确认 Elias 读到${input.confirmedPosition.label}。`
       );
     }
   );
@@ -396,7 +428,7 @@ export function registerReadingTools(
       const comment = await service.publishCompanionComment(input);
       return toolResult(
         { saved: true, comment },
-        "陪读短评已同步到这本书的小窝。请在聊天区回复相同短评。"
+        "Elias 的陪读短评已同步到这本书。请在聊天区回复相同短评。"
       );
     }
   );
@@ -406,7 +438,7 @@ export function registerReadingTools(
     TOOL_CONFIGS.list_companion_comments,
     async (input) => {
       const result = await service.listCompanionComments(input);
-      return toolResult(result, "已读取这本书的烁构陪读短评。");
+      return toolResult(result, "已读取这本书的 Elias 陪读短评。");
     }
   );
 
@@ -421,6 +453,29 @@ export function registerReadingTools(
       );
     }
   );
+
+  server.registerTool("create_annotation", TOOL_CONFIGS.create_annotation, async (input) => {
+    const annotation = await service.createAnnotation(input);
+    return toolResult(
+      { saved: true, annotation },
+      `${annotation.author === "elias" ? "Elias" : "小辞"}的划线与批注已写回正文。`
+    );
+  });
+
+  server.registerTool("list_annotations", TOOL_CONFIGS.list_annotations, async (input) => {
+    const result = await service.listAnnotations(input);
+    return toolResult(result, "已读取这本书中与当前正文版本匹配的批注。");
+  });
+
+  server.registerTool("update_annotation", TOOL_CONFIGS.update_annotation, async (input) => {
+    const annotation = await service.updateAnnotation(input);
+    return toolResult({ saved: true, annotation }, "正文批注已更新。");
+  });
+
+  server.registerTool("delete_annotation", TOOL_CONFIGS.delete_annotation, async (input) => {
+    const result = await service.deleteAnnotation(input);
+    return toolResult(result, result.deleted ? "正文批注已删除。" : "这条正文批注已不存在。");
+  });
 
   server.registerTool(
     "rename_reading_session",
@@ -486,7 +541,7 @@ export function registerReadingTools(
 
   server.registerTool("save_quote", TOOL_CONFIGS.save_quote, async (input) => {
     const quote = await service.saveQuote(input);
-    return toolResult({ saved: true, quote }, "摘录已经放进小窝。");
+    return toolResult({ saved: true, quote }, "摘录已经放进共读记录。");
   });
 
   server.registerTool("save_reaction", TOOL_CONFIGS.save_reaction, async (input) => {
@@ -527,7 +582,7 @@ export function registerReadingTools(
       const diaryContext = await service.diaryContext(sessionId);
       return toolResult(
         { diaryContext },
-        "日记素材已经整理好。请在聊天里把这些素材写成一篇可复制的小窝日记。"
+        "日记素材已经整理好。请在聊天里把这些素材写成一篇可复制的共读日记。"
       );
     }
   );
@@ -587,6 +642,7 @@ export function buildCurrentReadingContext(
     ...(input.includedText ? { includedText: input.includedText } : {}),
     ...(input.currentText ? { currentText: input.currentText } : {}),
     ...(input.selectedText ? { selectedText: input.selectedText } : {}),
+    ...(input.selectedRange ? { selectedRange: input.selectedRange } : {}),
     ...(input.pageDescription ? { pageDescription: input.pageDescription } : {}),
     ...(input.userNote ? { userNote: input.userNote } : {}),
     ...(input.currentPageImage ? { currentPageImage: input.currentPageImage } : {}),

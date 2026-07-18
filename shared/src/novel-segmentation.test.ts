@@ -2,6 +2,22 @@ import { describe, expect, it } from "vitest";
 import { splitNovelText, splitNovelTextForVersion } from "./novel-segmentation.js";
 
 describe("splitNovelText", () => {
+  it("recognizes stable English chapter headings for public-domain books", () => {
+    const source = [
+      "PREFACE",
+      "A short preface.",
+      "",
+      "CHAPTER I",
+      "The first chapter begins.",
+      "",
+      "CHAPTER II. THE GARDEN",
+      "The second chapter begins."
+    ].join("\n");
+    const chunks = splitNovelText(source);
+    expect(chunks.some((chunk) => chunk.startsWith("PREFACE"))).toBe(true);
+    expect(chunks.some((chunk) => chunk.startsWith("CHAPTER I"))).toBe(true);
+    expect(chunks.some((chunk) => chunk.startsWith("CHAPTER II. THE GARDEN"))).toBe(true);
+  });
   it("merges short natural paragraphs while preserving their blank lines", () => {
     expect(splitNovelText(" 第一段。 \n\n\n## 第二段\n内容。 ")).toEqual([
       "第一段。\n\n## 第二段\n内容。"

@@ -1,5 +1,7 @@
 import {
   migrateReadingDatabase,
+  type Annotation,
+  type AnnotationOperation,
   type Bookmark,
   type CompanionComment,
   type Quote,
@@ -12,12 +14,44 @@ import {
 export function normalizeReadingDatabase(input: unknown): ReadingDatabase {
   const database = migrateReadingDatabase(input);
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     sessions: database.sessions.map(copySession),
     quotes: database.quotes.map(copyQuote),
     reactions: database.reactions.map(copyReaction),
     bookmarks: database.bookmarks.map(copyBookmark),
-    companionComments: database.companionComments.map(copyCompanionComment)
+    companionComments: database.companionComments.map(copyCompanionComment),
+    annotations: database.annotations.map(copyAnnotation),
+    annotationOperations: (database.annotationOperations ?? []).map(copyAnnotationOperation)
+  };
+}
+
+function copyAnnotationOperation(operation: AnnotationOperation): AnnotationOperation {
+  return {
+    operationId: operation.operationId,
+    sessionId: operation.sessionId,
+    kind: operation.kind,
+    annotationId: operation.annotationId,
+    ...(operation.annotation ? { annotation: copyAnnotation(operation.annotation) } : {}),
+    ...(operation.deleted !== undefined ? { deleted: operation.deleted } : {})
+  };
+}
+
+function copyAnnotation(annotation: Annotation): Annotation {
+  return {
+    id: annotation.id,
+    sessionId: annotation.sessionId,
+    paragraphIndex: annotation.paragraphIndex,
+    selectedText: annotation.selectedText,
+    startOffset: annotation.startOffset,
+    endOffset: annotation.endOffset,
+    author: annotation.author,
+    note: annotation.note,
+    color: annotation.color,
+    createdAt: annotation.createdAt,
+    ...(annotation.updatedAt ? { updatedAt: annotation.updatedAt } : {}),
+    operationId: annotation.operationId,
+    sourceHash: annotation.sourceHash,
+    segmentationVersion: annotation.segmentationVersion
   };
 }
 

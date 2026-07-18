@@ -7,8 +7,8 @@ export function buildBatchChatMessage(job: ReadingSyncJob, batch: SyncBatch) {
     batchHeader(batch),
     "",
     "这是 skipped range 分批补课，不是正式点评。",
-    `用户当前已读到${job.targetPosition.label}，烁构上次确认读到${confirmedLabel(job)}。`,
-    "这是补课批次。烁构先安静追到用户当前位置，不展开评论。",
+    `小辞当前已读到${job.targetPosition.label}，Elias 上次确认读到${confirmedLabel(job)}。`,
+    "这是补课批次。Elias 先安静追到小辞的位置，不展开评论。",
     `只简短回复：“已读到第 ${batch.rangeEnd} 段。”`,
     "",
     batch.text

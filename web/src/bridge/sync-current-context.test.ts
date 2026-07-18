@@ -14,7 +14,7 @@ describe("syncCurrentContext", () => {
 
     const mode = await syncCurrentContext({
       context: { title: "Book", currentText: "current paragraph" },
-      successPrompt: "陪我看看这里",
+      successPrompt: "叫 Elias 看这里",
       fallbackPrompt: "当前段落：current paragraph",
       updateModelContext: update,
       sendMessage: send
@@ -22,7 +22,7 @@ describe("syncCurrentContext", () => {
 
     expect(mode).toBe("context");
     expect(calls).toEqual(["context", "message"]);
-    expect(send).toHaveBeenCalledWith("陪我看看这里", { scrollToBottom: false });
+    expect(send).toHaveBeenCalledWith("叫 Elias 看这里", { scrollToBottom: false });
   });
 
   it("puts the current content in the message when model context is unavailable", async () => {
@@ -30,7 +30,7 @@ describe("syncCurrentContext", () => {
 
     const mode = await syncCurrentContext({
       context: { title: "Book", currentText: "current paragraph" },
-      successPrompt: "陪我看看这里",
+      successPrompt: "叫 Elias 看这里",
       fallbackPrompt: "《Book》第 2 段\n当前段落：current paragraph",
       updateModelContext: vi.fn().mockResolvedValue(false),
       sendMessage: send

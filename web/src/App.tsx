@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  Annotation,
   CommentLength,
   CompanionComment,
   MangaLocalCache,
@@ -68,10 +69,13 @@ import { useLiveReading } from "./hooks/useLiveReading.js";
 import { useReadingHostLayout } from "./hooks/useReadingHostLayout.js";
 import { Home, type BookshelfItem } from "./pages/Home.js";
 import { MangaReader, type MangaPage } from "./pages/MangaReader.js";
-import { NovelReader } from "./pages/NovelReader.js";
+import { NovelReader, type NovelSelection } from "./pages/NovelReader.js";
+import { PublicDomainLibrary } from "./pages/PublicDomainLibrary.js";
+import { GutendexPublicDomainProvider } from "./features/public-domain/gutendex-provider.js";
+import type { PublicDomainBook } from "./features/public-domain/provider.js";
 import { IndexedDbReadingCache } from "./storage/indexeddb-cache.js";
 
-type Screen = "home" | "setup" | "novel" | "manga";
+type Screen = "home" | "library" | "setup" | "novel" | "manga";
 type Overlay = "cache" | "more" | "diary" | "management" | null;
 type ImportProgress = {
   stage:
@@ -105,6 +109,7 @@ type OpenOutput = {
 };
 
 const cache = new IndexedDbReadingCache();
+const publicDomainProvider = new GutendexPublicDomainProvider();
 const DEEP_ANALYSIS_DOCK_TEXT = "已生成长评，可回聊天区查看。";
 const MAX_NOVEL_FILE_SIZE = 5 * 1024 * 1024;
 const LARGE_NOVEL_TEXTAREA_PREVIEW_BYTES = 2 * 1024 * 1024;
@@ -148,6 +153,7 @@ export function App() {
   const [toast, setToast] = useState("");
   const [preferenceSaving, setPreferenceSaving] = useState(false);
   const [companionComments, setCompanionComments] = useState<CompanionComment[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [companionLoading, setCompanionLoading] = useState(false);
   const [companionError, setCompanionError] = useState("");
   const [pendingCommentDraft, setPendingCommentDraft] =
@@ -217,6 +223,40 @@ export function App() {
       if (!background) setCompanionLoading(false);
     }
   }, []);
+
+  const loadAnnotations = useCallback(async (session: ReadingSession) => {
+    const manifest = session.sourceManifest;
+    if (!manifest || session.type !== "novel") {
+      setAnnotations([]);
+      return;
+    }
+    try {
+      const result = await callTool("list_annotations", {
+        sessionId: session.id,
+        sourceHash: manifest.contentHash,
+        segmentationVersion: manifest.segmentationVersion
+      });
+      const next = Array.isArray(result.structuredContent?.annotations)
+        ? (result.structuredContent.annotations as Annotation[])
+        : [];
+      setAnnotations(next.filter((annotation) => annotation.sessionId === session.id));
+    } catch {
+      setAnnotations([]);
+      setToast("批注与当前正文版本无法安全对应，已停止渲染。");
+    }
+  }, []);
+
+  useEffect(() => {
+    const session = sessionBundle?.session;
+    if (screen !== "novel" || !session) {
+      setAnnotations([]);
+      return;
+    }
+    setAnnotations(sessionBundle.annotations ?? []);
+    void loadAnnotations(session);
+    const timer = window.setInterval(() => void loadAnnotations(session), 4_000);
+    return () => window.clearInterval(timer);
+  }, [loadAnnotations, screen, sessionBundle?.session.id, sessionBundle?.session.sourceManifest]);
 
   useEffect(() => {
     const sessionId = sessionBundle?.session.id;
@@ -382,7 +422,7 @@ export function App() {
   useEffect(() => {
     if ((screen === "novel" || screen === "manga") && !sessionBundle) return;
     saveReaderWidgetState({
-      screen,
+      screen: screen === "library" ? "home" : screen,
       ...(sessionBundle ? { sessionId: sessionBundle.session.id } : {}),
       ...(position ? { positionIndex: position.index } : {}),
       ...(screen === "novel" || screen === "manga"
@@ -484,7 +524,7 @@ export function App() {
     if (!sessionBundle || !position) return;
     const saveFullscreenIntent = (immersive: boolean) =>
       saveReaderWidgetState({
-        screen,
+        screen: sessionBundle.session.type,
         sessionId: sessionBundle.session.id,
         positionIndex: position.index,
         scrollTop: readerScrollTop,
@@ -540,7 +580,7 @@ export function App() {
         result.structuredContent?.nextCursor as string | undefined
       );
     } catch {
-      setToast("烁构评论历史暂时没有读取成功。");
+      setToast("Elias 的评论历史暂时没有读取成功。");
     } finally {
       setHistoryLoading(false);
     }
@@ -800,7 +840,7 @@ export function App() {
         stage: "creating_session",
         paragraphCount: setupType === "novel" ? novelChunks.length : current.paragraphCount,
         screen,
-        message: "正在创建阅读小窝"
+        message: "正在创建共读空间"
       }));
       await nextFrame();
       const result = await callTool("start_reading_session", { title: title.trim(), type: setupType });
@@ -814,7 +854,7 @@ export function App() {
       ...current,
       sessionId: session?.id,
       screen,
-      message: "阅读小窝已创建"
+      message: "共读空间已创建"
     }));
     await nextFrame();
     let sourceManifest =
@@ -958,7 +998,8 @@ export function App() {
       session,
       quotes: sessionBundle?.quotes ?? [],
       reactions: sessionBundle?.reactions ?? [],
-      bookmarks: sessionBundle?.bookmarks ?? []
+      bookmarks: sessionBundle?.bookmarks ?? [],
+      annotations: sessionBundle?.annotations ?? []
     };
     setSessionBundle(bundle);
     setRecent((items) => [
@@ -1027,7 +1068,7 @@ export function App() {
     try {
       await startReading();
     } catch {
-      setToast("创建阅读小窝失败，请重试；正文仍保留在当前页面。");
+      setToast("创建共读空间失败，请重试；正文仍保留在当前页面。");
     } finally {
       setStartReadingInFlight(false);
     }
@@ -1052,8 +1093,7 @@ export function App() {
   }
 
   async function lookAtNovel(
-    currentText: string,
-    selectedText: string,
+    selection: NovelSelection | null,
     preferenceOverride?: Pick<SessionPreferences, "readingCommentMode" | "commentLength">
   ) {
     if (!sessionBundle) return;
@@ -1067,13 +1107,25 @@ export function App() {
     setSyncRequestInFlight(true);
     try {
       const sourceContext = getSourceContext(sessionBundle.session.sourceManifest);
+      const currentIndex = sessionBundle.session.userCurrentPosition.index;
+      const currentText = chunks[currentIndex - 1] ?? "";
+      const selectedText = selection?.selectedText ?? "";
+      const contextBefore = selection
+        ? currentText.slice(Math.max(0, selection.startOffset - 280), selection.startOffset)
+        : "";
+      const contextAfter = selection
+        ? currentText.slice(selection.endOffset, selection.endOffset + 280)
+        : "";
+      const contextText = selection
+        ? `${contextBefore}${selection.selectedText}${contextAfter}`
+        : currentText;
       const operationId = crypto.randomUUID();
       const activePreferences = preferenceOverride ?? sessionBundle.session.sessionPreferences;
       const policyPrompt = buildCurrentOnlyPrompt({
         sessionId: sessionBundle.session.id,
         title: sessionBundle.session.title,
         position: sessionBundle.session.userCurrentPosition.index,
-        text: currentText,
+        text: contextText,
         hasUnconfirmedGap:
           sessionBundle.session.userCurrentPosition.index >
           (sessionBundle.session.assistantSyncedPosition?.index ?? 0),
@@ -1087,10 +1139,21 @@ export function App() {
         sessionId: sessionBundle.session.id,
         currentPosition: sessionBundle.session.userCurrentPosition,
         mode: "current_only",
-        currentText,
+        currentText: contextText,
         readingCommentMode: activePreferences.readingCommentMode,
         commentLength: activePreferences.commentLength,
         ...(selectedText ? { selectedText } : {}),
+        ...(selection
+          ? {
+              selectedRange: {
+                paragraphIndex: selection.paragraphIndex,
+                startOffset: selection.startOffset,
+                endOffset: selection.endOffset,
+                contextBefore,
+                contextAfter
+              }
+            }
+          : {}),
         ...(sourceContext ? { sourceContext } : {}),
         ...(permission.userNote ? { userNote: permission.userNote } : {})
       });
@@ -1099,13 +1162,21 @@ export function App() {
         setToast("当前段落同步失败，请再试一次。");
         return;
       }
+      const annotationPrompt = selection && sourceContext
+        ? [
+            "小辞刚刚主动选择了这段文字。先直接回应她关注的内容。",
+            "如果你的回应适合留在正文中，请调用 create_annotation 写回一条克制的 Elias 划线与短批注；不要替小辞写批注。",
+            `create_annotation 使用 paragraphIndex=${selection.paragraphIndex}、startOffset=${selection.startOffset}、endOffset=${selection.endOffset}、author=elias、color=slate、sourceHash=${sourceContext.contentHash}、segmentationVersion=${sourceContext.segmentationVersion}、operationId=elias-${operationId}，selectedText 必须原样使用本次选择。`
+          ].join("\n")
+        : "";
+      const responsePrompt = [policyPrompt, annotationPrompt].filter(Boolean).join("\n");
       const fallbackPrompt = [
-        policyPrompt,
+        responsePrompt,
         selectedText ? `我选中的句子：${selectedText}` : ""
       ].filter(Boolean).join("\n");
       const mode = await syncCurrentContext({
         context,
-        successPrompt: policyPrompt,
+        successPrompt: responsePrompt,
         fallbackPrompt,
         updateModelContext,
         sendMessage: askChatGpt
@@ -1118,7 +1189,7 @@ export function App() {
       });
       setToast(
         mode === "context"
-          ? `已同步${sessionBundle.session.userCurrentPosition.label}，烁构正在看这里。`
+          ? `已同步${sessionBundle.session.userCurrentPosition.label}，Elias 正在看这里。`
           : "已用兼容模式发送当前段落。"
       );
     } finally {
@@ -1126,14 +1197,14 @@ export function App() {
     }
   }
 
-  async function requestNovelSync(currentText: string, selectedText: string) {
+  async function requestNovelSync(selection: NovelSelection | null) {
     if (!sessionBundle) return;
     if (syncRequestInFlight || syncJobRef.current) return;
     const userIndex = sessionBundle.session.userCurrentPosition.index;
     const assistantIndex = sessionBundle.session.assistantSyncedPosition?.index ?? 0;
     if (userIndex <= assistantIndex) {
-      setToast("烁构已经看到这里啦，正在换个角度陪你看。");
-      await lookAtNovel(currentText, selectedText);
+      setToast("Elias 已经看到这里了，正在换个角度陪你看。");
+      await lookAtNovel(selection);
       return;
     }
     if (!allowAutomaticSync("range_sync")) return;
@@ -1349,7 +1420,7 @@ export function App() {
       if (confirmed.mode === "live_reading") {
         clearSyncJobState();
         await cache.removeSyncJob(syncJob.sessionId).catch(() => undefined);
-        setToast(`已确认烁构读到第 ${batch.rangeEnd} 段。`);
+        setToast(`已确认 Elias 读到第 ${batch.rangeEnd} 段。`);
         return;
       }
       const formalMode = sessionBundle.session.sessionPreferences.readingCommentMode;
@@ -1390,7 +1461,7 @@ export function App() {
       });
       clearSyncJobState();
       await cache.removeSyncJob(syncJob.sessionId).catch(() => undefined);
-      setToast("烁构追上你啦，可以正式陪读了。");
+      setToast("Elias 追上小辞了，可以正式陪读了。");
       return;
     }
     storeSyncJob(confirmed);
@@ -1761,8 +1832,7 @@ export function App() {
     }
     setOverlay(null);
     if (sessionBundle.session.type === "novel") {
-      const currentText = chunks[sessionBundle.session.userCurrentPosition.index - 1] ?? "";
-      await lookAtNovel(currentText, "", updated);
+      await lookAtNovel(null, updated);
       return;
     }
     await lookAtManga(updated);
@@ -1846,7 +1916,7 @@ export function App() {
       setPendingCommentDraft(null);
       setManualSaveRevision((value) => value + 1);
       void loadCompanionComments(sessionBundle.session.id, true);
-      setToast("短评已经收入小窝。");
+      setToast("短评已经收入共读记录。");
     } catch (error) {
       console.warn("Companion comment save failed", error);
       setToast("短评保存失败，可重试。");
@@ -1864,13 +1934,16 @@ export function App() {
 
   function appendSessionRecord(
     sessionId: string,
-    patch: Partial<Pick<SessionBundle, "quotes" | "reactions" | "bookmarks">>
+    patch: Partial<Pick<SessionBundle, "quotes" | "reactions" | "bookmarks" | "annotations">>
   ) {
     const applyPatch = <T extends SessionBundle | BookshelfItem>(bundle: T): T => ({
       ...bundle,
       ...(patch.quotes ? { quotes: [...bundle.quotes, ...patch.quotes] } : {}),
       ...(patch.reactions ? { reactions: [...bundle.reactions, ...patch.reactions] } : {}),
-      ...(patch.bookmarks ? { bookmarks: [...bundle.bookmarks, ...patch.bookmarks] } : {})
+      ...(patch.bookmarks ? { bookmarks: [...bundle.bookmarks, ...patch.bookmarks] } : {}),
+      ...(patch.annotations
+        ? { annotations: [...(bundle.annotations ?? []), ...patch.annotations] }
+        : {})
     });
     setSessionBundle((current) =>
       current?.session.id === sessionId ? applyPatch(current) : current
@@ -1883,6 +1956,64 @@ export function App() {
     );
   }
 
+  async function importPublicDomainBook(book: PublicDomainBook) {
+    try {
+      const text = await publicDomainProvider.downloadText(book);
+      setSessionBundle(null);
+      setExistingSession(null);
+      setSetupType("novel");
+      setTitle(book.title);
+      setSourceText(text);
+      setSelectedFiles([]);
+      setRemembered(true);
+      setSourceAvailability("unknown");
+      setImportProgress({
+        stage: "ready",
+        decodedTextLength: text.length,
+        screen: "setup",
+        message: `已从英文公版书库导入 · ${book.author}`
+      });
+      setScreen("setup");
+      setToast("英文公版原文已准备好；确认书名后即可加入私人书架。");
+    } catch {
+      setToast("公版原文下载失败，请稍后重试；没有写入私人书架。");
+    }
+  }
+
+  async function createXiaociAnnotation(selection: NovelSelection, note: string) {
+    if (!sessionBundle?.session.sourceManifest) {
+      setToast("正文来源尚未校验，暂时不能安全保存批注。");
+      return;
+    }
+    const manifest = sessionBundle.session.sourceManifest;
+    const currentText = chunks[selection.paragraphIndex - 1] ?? "";
+    if (
+      currentText.slice(selection.startOffset, selection.endOffset) !==
+      selection.selectedText
+    ) {
+      setToast("所选文字的位置已经变化，请重新选择。");
+      return;
+    }
+    const result = await callTool("create_annotation", {
+      sessionId: sessionBundle.session.id,
+      ...selection,
+      author: "xiaoci",
+      note,
+      color: "clay",
+      sourceHash: manifest.contentHash,
+      segmentationVersion: manifest.segmentationVersion,
+      operationId: crypto.randomUUID()
+    });
+    const annotation = result.structuredContent?.annotation as Annotation | undefined;
+    if (!annotation) {
+      setToast("批注没有保存成功，请再试一次。");
+      return;
+    }
+    setAnnotations((items) => [...items.filter((item) => item.id !== annotation.id), annotation]);
+    appendSessionRecord(sessionBundle.session.id, { annotations: [annotation] });
+    setToast(note ? "小辞的批注已经留在这里。" : "小辞已经划线。");
+  }
+
   async function saveQuote(content: string) {
     if (!sessionBundle || !content.trim()) return;
     const result = await callTool("save_quote", {
@@ -1893,7 +2024,7 @@ export function App() {
     });
     const quote = result.structuredContent?.quote as any;
     if (quote) appendSessionRecord(sessionBundle.session.id, { quotes: [quote] });
-    setToast("这句已经收进小窝。");
+    setToast("这句已经收进共读摘录。");
   }
 
   async function saveReaction() {
@@ -2022,14 +2153,22 @@ export function App() {
         <Home
           bookshelf={recent}
           onNew={begin}
+          onPublicDomain={() => setScreen("library")}
           onOpen={continueReading}
           onReimport={prepareReimport}
           onManage={(item) => void openBookManagement(item)}
         />
       ) : null}
+      {screen === "library" ? (
+        <PublicDomainLibrary
+          onBack={() => setScreen("home")}
+          onSearch={(query) => publicDomainProvider.search(query)}
+          onImport={importPublicDomainBook}
+        />
+      ) : null}
       {screen === "setup" ? (
         <main className="setup-shell">
-          <button className="back-link" onClick={() => setScreen("home")}>‹ 返回小窝</button>
+          <button className="back-link" onClick={() => setScreen("home")}>‹ 返回书架</button>
           <h1>{setupType === "novel" ? "小说共读" : "漫画共读"}</h1>
           <p>{existingSession ? `继续《${existingSession.title}》` : "准备好内容，我们就一起开始。"}</p>
           <label>作品名<input aria-label="作品名" value={title} onChange={(e) => setTitle(e.target.value)} /></label>
@@ -2073,17 +2212,17 @@ export function App() {
             <label className="file-drop">导入漫画图片<input type="file" accept="image/*" multiple onChange={(e) => setSelectedFiles(Array.from(e.target.files ?? []))} /><span>{selectedFiles.length ? `已选择 ${selectedFiles.length} 张` : "点击选择多张图片"}</span></label>
           )}
           <label className="remember-row"><input type="checkbox" checked={remembered} onChange={(e) => setRemembered(e.target.checked)} />在本设备记住{setupType === "novel" ? "这本书" : "这部漫画"}</label>
-          <p className="privacy-note">正文/图片只保存在本设备，用于下次继续阅读；服务器不会保存全文或漫画原图。</p>
+          <p className="privacy-note">正文/图片会缓存到本设备；启用私人云端时副本只写入你的私有 R2，不会放进聊天消息或公开链接。</p>
           {existingSession ? (
-            <section className="setup-companion-summary" aria-label="烁构最近短评">
+            <section className="setup-companion-summary" aria-label="Elias 最近短评">
               <div>
-                <strong>烁构最近短评</strong>
+                <strong>Elias 最近短评</strong>
                 <span>重新导入正文后，陪读 Dock 会继续显示这些短评。</span>
               </div>
-              {companionLoading ? <p>正在看看烁构留下了什么……</p> : null}
+              {companionLoading ? <p>正在看看 Elias 留下了什么……</p> : null}
               {!companionLoading && companionError ? <p>{companionError}</p> : null}
               {!companionLoading && !companionError && companionComments.length === 0 ? (
-                <p>烁构还没留下短评。</p>
+                <p>Elias 还没留下短评。</p>
               ) : null}
               {!companionLoading && !companionError
                 ? companionComments.slice(0, 3).map((comment) => (
@@ -2104,7 +2243,7 @@ export function App() {
             disabled={startReadingInFlight}
             onClick={() => void submitReadingSetup()}
           >
-            {startReadingInFlight ? "正在进入…" : "进入阅读小窝"}
+            {startReadingInFlight ? "正在进入…" : "进入共读空间"}
           </button>
         </main>
       ) : null}
@@ -2112,9 +2251,13 @@ export function App() {
         <NovelReader
           session={sessionBundle.session}
           chunks={chunks}
+          annotations={annotations}
           onPosition={changePosition}
-          onLook={requestNovelSync}
-          onSaveQuote={saveQuote}
+          onLook={(selection) => {
+            if (selection) void lookAtNovel(selection);
+            else void requestNovelSync(null);
+          }}
+          onCreateAnnotation={createXiaociAnnotation}
           onFinish={finishToday}
           onFullscreen={() => void openFullscreenReader()}
           fullscreenLabel={readerImmersive ? "退出全屏" : "全屏阅读"}
@@ -2183,7 +2326,7 @@ export function App() {
           onClose={() => setOverlay(null)}
         />
       ) : null}
-      {overlay === "diary" && diaryContext ? <DiaryPreview context={diaryContext} onWrite={() => askChatGpt("请根据刚刚整理的小窝日记素材，写一篇温暖、可复制到 Notion 的今日共读日记。")} onClose={() => setOverlay(null)} /> : null}
+      {overlay === "diary" && diaryContext ? <DiaryPreview context={diaryContext} onWrite={() => askChatGpt("请根据刚刚整理的共读日记素材，写一篇安静、真诚、可复制到 Notion 的今日共读日记。")} onClose={() => setOverlay(null)} /> : null}
       {overlay === "management" && managedBook ? (
         <BookManagementSheet
           bundle={managedBook}
@@ -2215,10 +2358,7 @@ export function App() {
             setSyncChoiceOpen(false);
             void (sessionBundle.session.type === "manga"
               ? lookAtManga()
-              : lookAtNovel(
-                  chunks[sessionBundle.session.userCurrentPosition.index - 1] ?? "",
-                  ""
-                ));
+              : lookAtNovel(null));
           }}
           onRecent={() =>
             void (sessionBundle.session.type === "manga"

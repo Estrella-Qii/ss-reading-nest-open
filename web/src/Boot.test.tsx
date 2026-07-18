@@ -9,7 +9,7 @@ describe("Boot", () => {
   it("shows a visible diagnostic while the app module is loading", () => {
     render(<Boot loadApp={() => new Promise(() => undefined)} />);
 
-    expect(screen.getByText("SxS 小窝加载诊断")).toBeInTheDocument();
+    expect(screen.getByText("和爸爸一起读 · 加载诊断")).toBeInTheDocument();
     expect(screen.getByText("loading-app")).toBeInTheDocument();
   });
 

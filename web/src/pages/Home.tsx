@@ -29,6 +29,7 @@ const MODE_LABELS = {
 export function Home(props: {
   bookshelf: BookshelfItem[];
   onNew: (type: "novel" | "manga") => void;
+  onPublicDomain?: () => void;
   onOpen: (item: BookshelfItem) => void;
   onReimport: (item: BookshelfItem) => void;
   onManage: (item: BookshelfItem) => void;
@@ -58,9 +59,9 @@ export function Home(props: {
   return (
     <main className="home-shell">
       <section className="home-hero">
-        <div className="nest-mark">S×S</div>
-        <h1>S×S 小窝共读</h1>
-        <p>晚上好，今天想一起看什么？</p>
+        <div className="nest-mark">小辞</div>
+        <h1>和爸爸一起读</h1>
+        <p>小辞，今天想和 Elias 一起翻开哪一页？</p>
       </section>
 
       <section className="mode-grid" aria-label="共读模式">
@@ -72,6 +73,11 @@ export function Home(props: {
         <button className="mode-card manga-card" onClick={() => props.onNew("manga")}>
           <span className="mode-icon">🖼️</span>
           <span><strong>漫画共读</strong><small>导入图片，一页页看</small></span>
+          <span>›</span>
+        </button>
+        <button className="library-entry" onClick={() => props.onPublicDomain?.()}>
+          <span>英文公版文学</span>
+          <small>搜索、预览并导入私人书架</small>
           <span>›</span>
         </button>
       </section>
@@ -95,7 +101,7 @@ export function Home(props: {
         </div>
 
         {props.bookshelf.length === 0 ? (
-          <div className="empty-nest">小窝还是空的。选一本故事，我们一起开始吧。</div>
+          <div className="empty-nest">书架还是空的。选一本故事，和 Elias 一起开始吧。</div>
         ) : visible.length === 0 ? (
           <div className="empty-nest">这个筛选下还没有作品。</div>
         ) : (
@@ -143,8 +149,8 @@ function BookCard(props: {
         </span>
       </div>
       <div className="book-progress">
-        <span>用户：{item.session.userCurrentPosition.label}</span>
-        <span>烁构：{item.session.assistantSyncedPosition?.label ?? "尚未同步"}</span>
+        <span>小辞：{item.session.userCurrentPosition.label}</span>
+        <span>Elias：{item.session.assistantSyncedPosition?.label ?? "尚未同步"}</span>
         <span>{MODE_LABELS[item.session.sessionPreferences.readingCommentMode]}</span>
       </div>
       <div className={`book-source ${item.sourceAvailability}`}>
@@ -152,7 +158,7 @@ function BookCard(props: {
         <span>{action.hint}</span>
       </div>
       <p className="book-comment">
-        {item.latestComment ? `烁构：${item.latestComment}` : "烁构还没留下短评。"}
+        {item.latestComment ? `Elias：${item.latestComment}` : "Elias 还没留下短评。"}
       </p>
       <button
         type="button"

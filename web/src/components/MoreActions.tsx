@@ -41,7 +41,7 @@ export function MoreActions(props: {
           onQuickAction={props.onQuickAction}
         />
         <button className="sheet-action" onClick={props.onBookmark}>保存书签</button>
-        <button className="sheet-action" onClick={props.onDiary}>写小窝日记</button>
+        <button className="sheet-action" onClick={props.onDiary}>写共读日记</button>
         <button className="sheet-action quiet-danger" onClick={props.onComplete}>完成这部作品</button>
         <button className="text-button" onClick={props.onClose}>取消</button>
       </section>

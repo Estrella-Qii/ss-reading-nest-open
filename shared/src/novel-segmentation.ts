@@ -51,7 +51,9 @@ function isSectionHeading(line: string): boolean {
   return (
     /^第\s*[0-9０-９一二两三四五六七八九十百千万〇零]+\s*[章节卷回部篇集](?!.*[。！？!?]$).{0,40}$/.test(line) ||
     /^[0-9０-９]{1,4}\s*[.．、)]$/.test(line) ||
-    /^[0-9０-９]{1,4}$/.test(line)
+    /^[0-9０-９]{1,4}$/.test(line) ||
+    /^(?:chapter|book|part|section|volume)\s+(?:[ivxlcdm]+|\d+|[a-z]+)(?:[.:\s—-].*)?$/i.test(line) ||
+    /^(?:prologue|epilogue|preface|introduction)$/i.test(line)
   );
 }
 

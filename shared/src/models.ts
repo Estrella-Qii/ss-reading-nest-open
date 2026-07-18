@@ -26,6 +26,7 @@ export type CompanionCommentSource =
   | "catch_up_completion"
   | "current_context"
   | "manual_save";
+export type AnnotationAuthor = "xiaoci" | "elias";
 
 export const NOVEL_SEGMENTATION_VERSION = 3;
 export const MAX_RECENT_COMPANION_COMMENTS = 20;
@@ -158,13 +159,46 @@ export interface CompanionComment {
   updatedAt?: string;
 }
 
+/**
+ * A UTF-16 character range inside one stable novel reading unit.
+ * sourceHash and segmentationVersion are render guards: clients must not
+ * apply the range when either value differs from the active source manifest.
+ */
+export interface Annotation {
+  id: string;
+  sessionId: string;
+  paragraphIndex: number;
+  selectedText: string;
+  startOffset: number;
+  endOffset: number;
+  author: AnnotationAuthor;
+  note: string;
+  color: string;
+  createdAt: string;
+  updatedAt?: string;
+  operationId: string;
+  sourceHash: string;
+  segmentationVersion: number;
+}
+
+export interface AnnotationOperation {
+  operationId: string;
+  sessionId: string;
+  kind: "create" | "update" | "delete";
+  annotationId: string;
+  annotation?: Annotation;
+  deleted?: boolean;
+}
+
 export interface ReadingDatabase {
-  schemaVersion: 4;
+  schemaVersion: 5;
   sessions: ReadingSession[];
   quotes: Quote[];
   reactions: Reaction[];
   bookmarks: Bookmark[];
   companionComments: CompanionComment[];
+  annotations: Annotation[];
+  annotationOperations?: AnnotationOperation[];
 }
 
 export type ReadingSyncMode =
@@ -195,6 +229,7 @@ export interface SessionBundle {
   quotes: Quote[];
   reactions: Reaction[];
   bookmarks: Bookmark[];
+  annotations?: Annotation[];
 }
 
 export interface LocalCacheMetadata {
