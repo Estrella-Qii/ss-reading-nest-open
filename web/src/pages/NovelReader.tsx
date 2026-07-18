@@ -27,6 +27,8 @@ export function NovelReader(props: {
   onPosition: (index: number) => void;
   onLook: (selection: NovelSelection | null) => void;
   onCreateAnnotation?: (selection: NovelSelection, note: string) => Promise<void> | void;
+  onUpdateAnnotation?: (annotation: Annotation, note: string) => Promise<Annotation>;
+  onDeleteAnnotation?: (annotation: Annotation) => Promise<void>;
   onFinish: () => void;
   onBack: () => void;
   onFullscreen: () => void;
@@ -59,6 +61,10 @@ export function NovelReader(props: {
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState("");
   const [activeAnnotation, setActiveAnnotation] = useState<Annotation | null>(null);
+  const [editingAnnotation, setEditingAnnotation] = useState(false);
+  const [editNote, setEditNote] = useState("");
+  const [annotationSaving, setAnnotationSaving] = useState(false);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const previous = () => props.onPosition(Math.max(1, index));
   const next = () => props.onPosition(Math.min(props.chunks.length, index + 2));
   const swipe = useHorizontalPaging(previous, next);
@@ -92,6 +98,8 @@ export function NovelReader(props: {
     setNoteOpen(false);
     setNote("");
     setActiveAnnotation(null);
+    setEditingAnnotation(false);
+    setDeleteConfirmationOpen(false);
   }, [index, props.companionLayoutRevision]);
 
   function captureSelection() {
@@ -102,6 +110,23 @@ export function NovelReader(props: {
     setNoteOpen(false);
     setNote("");
   }
+
+  useEffect(() => {
+    let frame = 0;
+    const onSelectionChange = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const selected = window.getSelection();
+        if (!selected || selected.isCollapsed || !textRef.current?.contains(selected.anchorNode)) return;
+        captureSelection();
+      });
+    };
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("selectionchange", onSelectionChange);
+    };
+  }, [paragraphIndex]);
 
   function clearSelection() {
     window.getSelection()?.removeAllRanges();
@@ -114,6 +139,38 @@ export function NovelReader(props: {
     if (!selection) return;
     await props.onCreateAnnotation?.(selection, annotationNote);
     clearSelection();
+  }
+
+  function closeAnnotationDetail() {
+    if (annotationSaving) return;
+    setActiveAnnotation(null);
+    setEditingAnnotation(false);
+    setDeleteConfirmationOpen(false);
+  }
+
+  async function updateActiveAnnotation() {
+    if (!activeAnnotation || activeAnnotation.author !== "xiaoci" || !props.onUpdateAnnotation) return;
+    setAnnotationSaving(true);
+    try {
+      const updated = await props.onUpdateAnnotation(activeAnnotation, editNote.trim());
+      setActiveAnnotation(updated);
+      setEditingAnnotation(false);
+    } finally {
+      setAnnotationSaving(false);
+    }
+  }
+
+  async function deleteActiveAnnotation() {
+    if (!activeAnnotation || activeAnnotation.author !== "xiaoci" || !props.onDeleteAnnotation) return;
+    setAnnotationSaving(true);
+    try {
+      await props.onDeleteAnnotation(activeAnnotation);
+      setActiveAnnotation(null);
+      setEditingAnnotation(false);
+      setDeleteConfirmationOpen(false);
+    } finally {
+      setAnnotationSaving(false);
+    }
   }
 
   return (
@@ -223,7 +280,7 @@ export function NovelReader(props: {
       ) : null}
 
       {activeAnnotation ? (
-        <div className="annotation-detail-backdrop" role="presentation" onClick={() => setActiveAnnotation(null)}>
+        <div className="annotation-detail-backdrop" role="presentation" onClick={closeAnnotationDetail}>
           <section
             className="annotation-detail"
             role="dialog"
@@ -232,8 +289,50 @@ export function NovelReader(props: {
           >
             <span>{activeAnnotation.author === "elias" ? "Elias" : "小辞"}</span>
             <blockquote>{activeAnnotation.selectedText}</blockquote>
-            <p>{activeAnnotation.note || "只在这里轻轻划了一道线。"}</p>
-            <button type="button" onClick={() => setActiveAnnotation(null)}>合上</button>
+            {editingAnnotation ? (
+              <form
+                className="annotation-edit-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void updateActiveAnnotation();
+                }}
+              >
+                <textarea
+                  aria-label="编辑小辞的批注"
+                  value={editNote}
+                  onChange={(event) => setEditNote(event.target.value)}
+                  placeholder="只划线也可以留空"
+                  autoFocus
+                />
+                <div>
+                  <button type="submit" disabled={annotationSaving}>保存修改</button>
+                  <button type="button" disabled={annotationSaving} onClick={() => setEditingAnnotation(false)}>取消</button>
+                </div>
+              </form>
+            ) : (
+              <p>{activeAnnotation.note || "只在这里轻轻划了一道线。"}</p>
+            )}
+            {activeAnnotation.author === "xiaoci" && !editingAnnotation ? (
+              deleteConfirmationOpen ? (
+                <div className="annotation-delete-confirmation" role="alert">
+                  <p>确定删除这条划线与批注吗？删除后无法从阅读器恢复。</p>
+                  <div>
+                    <button type="button" disabled={annotationSaving} onClick={() => void deleteActiveAnnotation()}>确认删除</button>
+                    <button type="button" disabled={annotationSaving} onClick={() => setDeleteConfirmationOpen(false)}>保留</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="annotation-detail-actions">
+                  <button type="button" onClick={() => {
+                    setEditNote(activeAnnotation.note);
+                    setEditingAnnotation(true);
+                  }}>编辑批注</button>
+                  <button type="button" onClick={() => setDeleteConfirmationOpen(true)}>删除批注</button>
+                </div>
+              )
+            ) : null}
+            {activeAnnotation.author === "elias" ? <p className="annotation-readonly-note">Elias 的批注在阅读器中只读。</p> : null}
+            <button className="annotation-close" type="button" onClick={closeAnnotationDetail}>合上</button>
           </section>
         </div>
       ) : null}

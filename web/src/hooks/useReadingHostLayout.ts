@@ -8,7 +8,19 @@ export type CompanionLayout = "wide" | "compact";
 
 export function useReadingHostLayout() {
   const [context, setContext] = useState<ReadingHostContext>(
-    () => window.openai?.hostContext ?? {}
+    () => ({
+      ...(window.openai?.hostContext ?? {}),
+      ...(window.openai?.safeArea
+        ? {
+            safeAreaInsets: {
+              top: window.openai.safeArea.top ?? 0,
+              right: window.openai.safeArea.right ?? 0,
+              bottom: window.openai.safeArea.bottom ?? 0,
+              left: window.openai.safeArea.left ?? 0
+            }
+          }
+        : {})
+    })
   );
   const [viewport, setViewport] = useState(() => ({
     width: window.innerWidth,

@@ -8,6 +8,7 @@
     "deploy:cloudflare": "pnpm build && pnpm --filter @ss/server deploy",
     "dev": "pnpm --filter @ss/shared build && pnpm --parallel --filter @ss/web --filter @ss/server dev",
     "test": "pnpm --filter @ss/shared build && pnpm -r test",
+    "test:co-reading": "pnpm --filter @ss/shared build && pnpm --filter @ss/server exec vitest run src/services/annotations.test.ts src/mcp/register-tools.test.ts && pnpm --filter @ss/web exec vitest run src/App.test.tsx src/pages/NovelReader.test.tsx src/bridge/sync-current-context.test.ts",
     "typecheck": "pnpm --filter @ss/shared build && pnpm -r typecheck"
   },
   "devDependencies": {

@@ -66,6 +66,8 @@ pnpm build
 - MCP endpoint：`http://localhost:8787/mcp`
 - 健康检查：`http://localhost:8787/health`
 
+第二阶段真实共读验收见 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)，私有 Cloudflare 部署见 [`docs/CLOUDFLARE_DEPLOYMENT.md`](docs/CLOUDFLARE_DEPLOYMENT.md)。
+
 ## Cloudflare 部署
 
 1. 复制 `.env.example`，只在本机或 Cloudflare 中填写真实值，不要提交。

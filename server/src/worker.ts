@@ -6,6 +6,7 @@ import { CloudSourceService } from "./services/cloud-source-service.js";
 import { handleSourceRoute } from "./source-routes.js";
 import { R2SourceObjectStorage } from "./storage/r2-source-object-storage.js";
 import { getWorkerRoute } from "./worker-router.js";
+import { handlePublicDomainRoute } from "./public-domain-routes.js";
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
@@ -14,6 +15,9 @@ export default {
 
     if (route === "health") {
       return Response.json({ ok: true, app: "和爸爸一起读", version: "0.2.1" });
+    }
+    if (route === "public-domain") {
+      return handlePublicDomainRoute(request);
     }
     if (route === "misconfigured") {
       console.error(JSON.stringify({ message: "MCP_PATH_TOKEN is not configured" }));
@@ -32,6 +36,7 @@ export default {
       }
       const server = createMcpServerFromRepository(repository, widgetHtml, sourceService, {
         sourceEndpointBase: `${url.origin}/source/${env.MCP_PATH_TOKEN}`,
+        publicDomainEndpointBase: `${url.origin}/public-domain`,
         workerOrigin: url.origin
       });
       return createMcpHandler(server, {

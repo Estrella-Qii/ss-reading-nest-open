@@ -8,24 +8,27 @@ vi.mock("@modelcontextprotocol/ext-apps/server", () => ({
 }));
 
 describe("registerReadingResource", () => {
-  it("uses an app-v19 resource with standard and ChatGPT legacy CSP access to the deployed Worker origin", async () => {
+  it("uses a versioned app resource with same-origin connections and ChatGPT compatibility metadata", async () => {
     const { registerReadingResource } = await import("./register-resource.js");
     const { READING_NEST_URI } = await import("./register-tools.js");
 
     registerReadingResource({} as never, "<html></html>", "https://reading-nest.example.workers.dev");
     const [, , uri, descriptor, loader] = registerAppResource.mock.calls[0];
 
-    expect(READING_NEST_URI).toBe("ui://ss-reading-nest/app-v19.html");
-    expect(uri).toBe("ui://ss-reading-nest/app-v19.html");
+    expect(READING_NEST_URI).toBe("ui://ss-reading-nest/app-v20.html");
+    expect(uri).toBe("ui://ss-reading-nest/app-v20.html");
     expect(descriptor._meta.ui.csp.connectDomains).toContain(
       "https://reading-nest.example.workers.dev"
     );
     expect(descriptor._meta["openai/widgetCSP"].connect_domains).toContain(
       "https://reading-nest.example.workers.dev"
     );
+    expect(descriptor._meta.ui.domain).toBe("https://reading-nest.example.workers.dev");
+    expect(descriptor._meta["openai/widgetDomain"]).toBe("https://reading-nest.example.workers.dev");
+    expect(descriptor._meta.ui.csp.connectDomains).not.toContain("https://gutendex.com");
 
     const loaded = await loader();
-    expect(loaded.contents[0].uri).toBe("ui://ss-reading-nest/app-v19.html");
+    expect(loaded.contents[0].uri).toBe("ui://ss-reading-nest/app-v20.html");
     expect(loaded.contents[0]._meta.ui.csp.connectDomains).toContain(
       "https://reading-nest.example.workers.dev"
     );

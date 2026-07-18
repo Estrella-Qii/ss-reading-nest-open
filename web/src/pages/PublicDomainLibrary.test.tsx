@@ -10,8 +10,7 @@ describe("PublicDomainLibrary", () => {
       author: "Austen, Jane",
       language: "English",
       description: "A novel of manners.",
-      coverUrl: "https://example.test/cover.jpg",
-      textUrl: "https://example.test/book.txt"
+      coverUrl: "https://example.test/cover.jpg"
     };
     const onSearch = vi.fn().mockResolvedValue([book]);
     const onImport = vi.fn().mockResolvedValue(undefined);
@@ -22,5 +21,18 @@ describe("PublicDomainLibrary", () => {
     expect(screen.getByText("Austen, Jane · English")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "导入私人书架" }));
     await waitFor(() => expect(onImport).toHaveBeenCalledWith(book));
+  });
+
+  it("shows retry and a distinct empty result state", async () => {
+    const onSearch = vi.fn()
+      .mockRejectedValueOnce(new Error("timeout"))
+      .mockResolvedValueOnce([]);
+    render(<PublicDomainLibrary onBack={vi.fn()} onSearch={onSearch} onImport={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("搜索英文公版作品"), { target: { value: "Unknown" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("暂时没有响应");
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText(/没有找到符合条件/)).toBeInTheDocument();
+    expect(onSearch).toHaveBeenCalledTimes(2);
   });
 });

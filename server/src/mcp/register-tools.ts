@@ -34,7 +34,7 @@ import { ReadingService } from "../services/reading-service.js";
 import type { CloudSourceService } from "../services/cloud-source-service.js";
 import { toolResult } from "./tool-result.js";
 
-export const READING_NEST_URI = "ui://ss-reading-nest/app-v19.html";
+export const READING_NEST_URI = "ui://ss-reading-nest/app-v20.html";
 
 const readOnly = {
   readOnlyHint: true,
@@ -250,7 +250,7 @@ export function registerReadingTools(
   server: McpServer,
   service: ReadingService,
   cloudSourceService?: CloudSourceService,
-  options: { sourceEndpointBase?: string } = {}
+  options: { sourceEndpointBase?: string; publicDomainEndpointBase?: string } = {}
 ) {
   registerAppTool(server, "open_reading_nest", TOOL_CONFIGS.open_reading_nest, async () => {
     const sessions = await service.listAllSessions();
@@ -264,7 +264,10 @@ export function registerReadingTools(
       {
         bookshelfSessions,
         recentSessions: bookshelfSessions.slice(0, 10),
-        ...(options.sourceEndpointBase ? { sourceEndpointBase: options.sourceEndpointBase } : {})
+        ...(options.sourceEndpointBase ? { sourceEndpointBase: options.sourceEndpointBase } : {}),
+        ...(options.publicDomainEndpointBase
+          ? { publicDomainEndpointBase: options.publicDomainEndpointBase }
+          : {})
       },
       "已打开《和爸爸一起读》。"
     );

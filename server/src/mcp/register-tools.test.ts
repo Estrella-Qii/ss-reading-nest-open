@@ -68,7 +68,8 @@ describe("tool descriptors", () => {
     };
 
     registerReadingTools(server as never, service as never, undefined, {
-      sourceEndpointBase: "https://worker.example.test/source/secret"
+      sourceEndpointBase: "https://worker.example.test/source/secret",
+      publicDomainEndpointBase: "https://worker.example.test/public-domain"
     });
     const result = (await handlers.get("open_reading_nest")?.()) as {
       structuredContent?: Record<string, unknown>;
@@ -76,6 +77,9 @@ describe("tool descriptors", () => {
 
     expect(result.structuredContent?.sourceEndpointBase).toBe(
       "https://worker.example.test/source/secret"
+    );
+    expect(result.structuredContent?.publicDomainEndpointBase).toBe(
+      "https://worker.example.test/public-domain"
     );
     expect(JSON.stringify(result)).not.toMatch(/sourceText|bytesBase64|data:image/);
   });

@@ -10,13 +10,15 @@ const sourceHash = "a".repeat(64);
 describe("ReadingService annotations", () => {
   let service: ReadingService;
   let sessionId: string;
+  let databasePath: string;
   let nextId = 0;
 
   beforeEach(async () => {
     nextId = 0;
     const dir = await mkdtemp(join(tmpdir(), "reading-annotations-"));
+    databasePath = join(dir, "reading.json");
     service = new ReadingService(
-      new JsonReadingRepository(join(dir, "reading.json")),
+      new JsonReadingRepository(databasePath),
       { now: () => new Date("2026-07-19T00:00:00.000Z"), id: () => `id-${++nextId}` }
     );
     const session = await service.startSession("The Secret Garden", "novel");
@@ -74,6 +76,34 @@ describe("ReadingService annotations", () => {
     expect(second.id).toBe(first.id);
     expect((await service.listAnnotations({ sessionId, sourceHash, segmentationVersion: 3 })).annotations)
       .toHaveLength(1);
+  });
+
+  it("restores Elias's exact annotation after reopening the persistent repository", async () => {
+    const created = await service.createAnnotation(input("elias", "elias-writeback"));
+    const reopened = new ReadingService(
+      new JsonReadingRepository(databasePath),
+      { now: () => new Date("2026-07-20T00:00:00.000Z"), id: () => "unused" }
+    );
+
+    const restored = await reopened.listAnnotations({
+      sessionId,
+      sourceHash,
+      segmentationVersion: 3,
+      paragraphIndex: 3,
+      author: "elias"
+    });
+
+    expect(restored.annotations).toEqual([
+      expect.objectContaining({
+        id: created.id,
+        paragraphIndex: 3,
+        selectedText: "garden",
+        startOffset: 4,
+        endOffset: 10,
+        author: "elias",
+        note: "这里像一道门。"
+      })
+    ]);
   });
 
   it("deduplicates update and delete operations and preserves their first result", async () => {

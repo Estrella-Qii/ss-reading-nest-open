@@ -4,6 +4,11 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 
 export default defineConfig({
   plugins: [react(), viteSingleFile()],
+  server: {
+    proxy: {
+      "/public-domain": "http://localhost:8787"
+    }
+  },
   test: {
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts"

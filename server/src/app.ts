@@ -4,12 +4,15 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { Request, Response } from "express";
 import { createMcpServer } from "./mcp/create-server.js";
+import { registerPublicDomainRoutes } from "./public-domain-routes.js";
 
 type TransportMap = Record<string, StreamableHTTPServerTransport>;
 
 export function createApp() {
   const app = createMcpExpressApp();
   const transports: TransportMap = {};
+
+  registerPublicDomainRoutes(app);
 
   app.get("/health", (_request, response) => {
     response.json({ ok: true, app: "和爸爸一起读", version: "0.2.1" });
@@ -30,7 +33,11 @@ export function createApp() {
         transport.onclose = () => {
           if (transport?.sessionId) delete transports[transport.sessionId];
         };
-        await (await createMcpServer()).connect(transport);
+        const origin = requestOrigin(request);
+        await (await createMcpServer(undefined, {
+          publicDomainEndpointBase: `${origin}/public-domain`,
+          workerOrigin: origin
+        })).connect(transport);
       }
 
       if (!transport) {
@@ -68,4 +75,12 @@ export function createApp() {
   });
 
   return app;
+}
+
+function requestOrigin(request: Request) {
+  const forwardedProtocol = request.headers["x-forwarded-proto"];
+  const forwardedHost = request.headers["x-forwarded-host"];
+  const protocol = typeof forwardedProtocol === "string" ? forwardedProtocol.split(",")[0] : request.protocol;
+  const host = typeof forwardedHost === "string" ? forwardedHost.split(",")[0] : request.get("host");
+  return `${protocol}://${host}`;
 }

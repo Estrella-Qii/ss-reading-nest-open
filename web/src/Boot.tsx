@@ -7,8 +7,9 @@ import {
   useState
 } from "react";
 
-const RESOURCE_VERSION = "app-v19";
+const RESOURCE_VERSION = "app-v20";
 const APP_VERSION = "0.2.2";
+const DEFAULT_LOAD_APP = () => import("./App.js");
 
 type AppModule = {
   App: ComponentType;
@@ -33,7 +34,7 @@ type BoundaryState = {
   error?: BootError;
 };
 
-export function Boot({ loadApp = () => import("./App.js") }: BootProps) {
+export function Boot({ loadApp = DEFAULT_LOAD_APP }: BootProps) {
   const [stage, setStage] = useState<BootStage>("booting");
   const [AppComponent, setAppComponent] = useState<ComponentType | null>(null);
   const [error, setError] = useState<BootError | null>(null);

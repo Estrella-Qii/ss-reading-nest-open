@@ -11,11 +11,13 @@ export function PublicDomainLibrary(props: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [importingId, setImportingId] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
 
   async function search() {
     if (!query.trim() || loading) return;
     setLoading(true);
     setError("");
+    setHasSearched(true);
     try {
       setBooks(await props.onSearch(query.trim()));
     } catch {
@@ -39,8 +41,17 @@ export function PublicDomainLibrary(props: {
           placeholder="Search title or author" />
         <button type="submit" disabled={!query.trim() || loading}>{loading ? "搜索中…" : "搜索"}</button>
       </form>
-      {error ? <p className="library-message" role="alert">{error}</p> : null}
-      {!loading && !error && books.length === 0 ? <p className="library-message">从 Austen、Dickens 或 Brontë 开始。</p> : null}
+      {error ? (
+        <div className="library-message" role="alert">
+          <p>{error}</p>
+          <button type="button" disabled={loading} onClick={() => void search()}>重试</button>
+        </div>
+      ) : null}
+      {!loading && !error && books.length === 0 ? (
+        <p className="library-message">
+          {hasSearched ? "没有找到符合条件的英文公版原文，换一个书名或作者试试。" : "从 Austen、Dickens 或 Brontë 开始。"}
+        </p>
+      ) : null}
       <section className="library-results" aria-label="公版作品搜索结果">
         {books.map((book) => (
           <article className="library-book" key={book.providerId}>
@@ -51,7 +62,14 @@ export function PublicDomainLibrary(props: {
               <p>{book.description || "Project Gutenberg public-domain text."}</p>
               <button type="button" disabled={Boolean(importingId)} onClick={async () => {
                 setImportingId(book.providerId);
-                try { await props.onImport(book); } finally { setImportingId(""); }
+                setError("");
+                try {
+                  await props.onImport(book);
+                } catch {
+                  setError("正文导入失败，可能是书源暂时不可用；请稍后重试。");
+                } finally {
+                  setImportingId("");
+                }
               }}>{importingId === book.providerId ? "导入中…" : "导入私人书架"}</button>
             </div>
           </article>

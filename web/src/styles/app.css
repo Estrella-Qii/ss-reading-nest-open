@@ -116,7 +116,7 @@ h1, h2, h3, p { margin-top: 0; }
 .library-book h2 { margin-bottom: 5px; font-family: "Songti SC", Georgia, serif; font-size: 18px; }
 .library-book p { margin-bottom: 9px; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .library-book .library-author { color: var(--ink); }
-.library-book button { min-height: 38px; padding: 6px 12px; font-size: 12px; }
+.library-book button { min-height: 44px; padding: 6px 12px; font-size: 12px; }
 .mode-card {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -535,7 +535,7 @@ input:focus, textarea:focus { border-color: var(--peach-strong); box-shadow: 0 0
   gap: 6px;
 }
 .selection-actions button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 7px;
   border: 1px solid var(--line);
   border-radius: 11px;
@@ -582,7 +582,40 @@ input:focus, textarea:focus { border-color: var(--peach-strong); box-shadow: 0 0
   line-height: 1.7;
 }
 .annotation-detail p { line-height: 1.65; }
-.annotation-detail button { float: right; border: 0; background: transparent; color: var(--muted); }
+.annotation-detail button { border: 0; background: transparent; color: var(--muted); }
+.annotation-detail .annotation-close { float: right; }
+.annotation-edit-form { display: grid; gap: 10px; }
+.annotation-edit-form textarea {
+  min-height: 88px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.55;
+}
+.annotation-edit-form > div,
+.annotation-detail-actions,
+.annotation-delete-confirmation > div { display: flex; justify-content: flex-end; gap: 8px; }
+.annotation-edit-form button,
+.annotation-detail-actions button,
+.annotation-delete-confirmation button {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 14px;
+}
+.annotation-delete-confirmation {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.annotation-delete-confirmation p,
+.annotation-readonly-note { color: var(--muted); font-size: 12px; }
+.annotation-delete-confirmation button:first-child { color: var(--danger); }
 .page-buttons {
   display: grid;
   grid-template-columns: minmax(96px, 1fr) auto minmax(96px, 1fr);

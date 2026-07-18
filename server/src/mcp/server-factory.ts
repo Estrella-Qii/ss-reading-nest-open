@@ -9,7 +9,11 @@ export function createMcpServerFromRepository(
   repository: ReadingRepository,
   widgetHtml: string,
   cloudSourceService?: CloudSourceService,
-  options: { sourceEndpointBase?: string; workerOrigin?: string } = {}
+  options: {
+    sourceEndpointBase?: string;
+    publicDomainEndpointBase?: string;
+    workerOrigin?: string;
+  } = {}
 ) {
   const server = new McpServer({
     name: "和爸爸一起读",

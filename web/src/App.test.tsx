@@ -892,7 +892,8 @@ describe("App", () => {
     });
   });
 
-  it("updates the current bookshelf after saving a bookmark and an exact annotation", async () => {
+  it("sends an exact limited selection to ChatGPT and saves 小辞's annotation", async () => {
+    const sendFollowUpMessage = vi.fn().mockResolvedValue(undefined);
     const callTool = vi.fn(async (name: string, args: Record<string, any>) => {
       if (name === "start_reading_session") {
         return {
@@ -982,6 +983,20 @@ describe("App", () => {
           }
         };
       }
+      if (name === "send_current_context") {
+        return {
+          structuredContent: {
+            context: {
+              sessionId: args.sessionId,
+              currentPosition: args.currentPosition,
+              currentText: args.currentText,
+              selectedText: args.selectedText,
+              selectedRange: args.selectedRange,
+              sourceContext: args.sourceContext
+            }
+          }
+        };
+      }
       if (name === "list_companion_comments") {
         return { structuredContent: { comments: [] } };
       }
@@ -992,7 +1007,7 @@ describe("App", () => {
       value: {
         toolOutput: { recentSessions: [] },
         callTool,
-        sendFollowUpMessage: vi.fn(),
+        sendFollowUpMessage,
         requestDisplayMode: vi.fn(),
         setWidgetState: vi.fn()
       }
@@ -1014,6 +1029,30 @@ describe("App", () => {
     window.getSelection()!.removeAllRanges();
     window.getSelection()!.addRange(range);
     fireEvent.mouseUp(screen.getByText("值得保存的句子").closest(".novel-scroll")!);
+    fireEvent.click(screen.getAllByRole("button", { name: "叫 Elias 看这里" })[0]!);
+    await waitFor(() => expect(callTool).toHaveBeenCalledWith(
+      "send_current_context",
+      expect.objectContaining({
+        sessionId: "session-records",
+        currentText: "值得保存的句子",
+        selectedText: "值得保存的句子",
+        selectedRange: {
+          paragraphIndex: 1,
+          startOffset: 0,
+          endOffset: "值得保存的句子".length,
+          contextBefore: "",
+          contextAfter: ""
+        },
+        sourceContext: expect.objectContaining({
+          contentHash: "d".repeat(64),
+          segmentationVersion: 2
+        })
+      })
+    ));
+    expect(sendFollowUpMessage).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringMatching(/create_annotation.*paragraphIndex=1.*startOffset=0.*author=elias/s),
+      scrollToBottom: false
+    }));
     fireEvent.click(screen.getAllByRole("button", { name: "小辞划线" })[0]!);
     await waitFor(() => expect(callTool).toHaveBeenCalledWith(
       "create_annotation",

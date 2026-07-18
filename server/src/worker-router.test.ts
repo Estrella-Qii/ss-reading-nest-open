@@ -6,6 +6,13 @@ describe("getWorkerRoute", () => {
     expect(getWorkerRoute(new URL("https://example.workers.dev/health"), "secret")).toBe("health");
   });
 
+  it("keeps the read-only public-domain proxy independent from the private MCP token", () => {
+    expect(getWorkerRoute(new URL("https://example.workers.dev/public-domain/search?q=Austen"), undefined))
+      .toBe("public-domain");
+    expect(getWorkerRoute(new URL("https://example.workers.dev/public-domain/text"), "secret"))
+      .toBe("public-domain");
+  });
+
   it("accepts only the exact private MCP path", () => {
     expect(getWorkerRoute(new URL("https://example.workers.dev/mcp/secret"), "secret")).toBe("mcp");
     expect(getWorkerRoute(new URL("https://example.workers.dev/mcp/wrong"), "secret")).toBe("not-found");

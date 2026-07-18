@@ -4,10 +4,7 @@ import { READING_NEST_URI } from "./register-tools.js";
 
 export function registerReadingResource(server: McpServer, widgetHtml: string, workerOrigin?: string) {
   const connectDomains = [
-    workerOrigin ?? "http://localhost:8787",
-    "https://gutendex.com",
-    "https://www.gutenberg.org",
-    "https://gutenberg.org"
+    workerOrigin ?? "http://localhost:8787"
   ];
   const resourceDomains = [
     "https://www.gutenberg.org",
@@ -21,6 +18,7 @@ export function registerReadingResource(server: McpServer, widgetHtml: string, w
     connect_domains: connectDomains,
     resource_domains: resourceDomains
   };
+  const widgetDomain = workerOrigin?.startsWith("https://") ? workerOrigin : undefined;
   registerAppResource(
     server,
     "和爸爸一起读",
@@ -30,11 +28,13 @@ export function registerReadingResource(server: McpServer, widgetHtml: string, w
       _meta: {
         ui: {
           csp: resourceCsp,
-          prefersBorder: true
+          prefersBorder: true,
+          ...(widgetDomain ? { domain: widgetDomain } : {})
         },
         "openai/widgetCSP": openaiWidgetCsp,
         "openai/widgetDescription":
-          "一个安静、轻盈的私人共读空间，供小辞与 Elias 阅读私人导入的小说或漫画。"
+          "一个安静、轻盈的私人共读空间，供小辞与 Elias 阅读私人导入的小说或漫画。",
+        ...(widgetDomain ? { "openai/widgetDomain": widgetDomain } : {})
       }
     },
     async () => {
@@ -47,12 +47,14 @@ export function registerReadingResource(server: McpServer, widgetHtml: string, w
             _meta: {
               ui: {
                 csp: resourceCsp,
-                prefersBorder: true
+                prefersBorder: true,
+                ...(widgetDomain ? { domain: widgetDomain } : {})
               },
               "openai/widgetCSP": openaiWidgetCsp,
               "openai/widgetDescription":
                 "一个安静、轻盈的私人共读空间，供小辞与 Elias 阅读私人导入的小说或漫画。",
-              "openai/widgetPrefersBorder": true
+              "openai/widgetPrefersBorder": true,
+              ...(widgetDomain ? { "openai/widgetDomain": widgetDomain } : {})
             }
           }
         ]

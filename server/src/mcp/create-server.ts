@@ -6,9 +6,12 @@ import { createMcpServerFromRepository } from "./server-factory.js";
 
 const widgetPath = fileURLToPath(new URL("../../../web/dist/index.html", import.meta.url));
 
-export async function createMcpServer(dataFile = resolve("data", "sessions.json")) {
+export async function createMcpServer(
+  dataFile = resolve("data", "sessions.json"),
+  options: { publicDomainEndpointBase?: string; workerOrigin?: string } = {}
+) {
   const widgetHtml = await readWidgetHtml();
-  return createMcpServerFromRepository(new JsonReadingRepository(dataFile), widgetHtml);
+  return createMcpServerFromRepository(new JsonReadingRepository(dataFile), widgetHtml, undefined, options);
 }
 
 async function readWidgetHtml() {

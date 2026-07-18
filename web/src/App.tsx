@@ -106,10 +106,10 @@ type OpenOutput = {
   bookshelfSessions?: Array<SessionBundle & { cacheState?: string }>;
   recentSessions?: Array<SessionBundle & { cacheState?: string }>;
   sourceEndpointBase?: string;
+  publicDomainEndpointBase?: string;
 };
 
 const cache = new IndexedDbReadingCache();
-const publicDomainProvider = new GutendexPublicDomainProvider();
 const DEEP_ANALYSIS_DOCK_TEXT = "已生成长评，可回聊天区查看。";
 const MAX_NOVEL_FILE_SIZE = 5 * 1024 * 1024;
 const LARGE_NOVEL_TEXTAREA_PREVIEW_BYTES = 2 * 1024 * 1024;
@@ -118,6 +118,11 @@ const LARGE_NOVEL_TEXTAREA_PREVIEW_CHARS = 1200;
 export function App() {
   const initial = initialToolOutput<OpenOutput>();
   const sourceEndpointBase = initial?.sourceEndpointBase ?? deriveSourceEndpointBase();
+  const publicDomainEndpointBase = initial?.publicDomainEndpointBase ?? derivePublicDomainEndpointBase();
+  const publicDomainProvider = useMemo(
+    () => new GutendexPublicDomainProvider(publicDomainEndpointBase),
+    [publicDomainEndpointBase]
+  );
   const cloudSourceClient = useMemo(
     () => new CloudSourceClient(sourceEndpointBase, undefined, callTool),
     [sourceEndpointBase]
@@ -1956,6 +1961,43 @@ export function App() {
     );
   }
 
+  function replaceAnnotationRecord(sessionId: string, annotation: Annotation) {
+    const replace = (items: Annotation[] = []) => [
+      ...items.filter((item) => item.id !== annotation.id),
+      annotation
+    ];
+    setAnnotations((items) => replace(items));
+    setSessionBundle((current) =>
+      current?.session.id === sessionId
+        ? { ...current, annotations: replace(current.annotations) }
+        : current
+    );
+    setRecent((items) =>
+      items.map((item) =>
+        item.session.id === sessionId
+          ? { ...item, annotations: replace(item.annotations) }
+          : item
+      )
+    );
+  }
+
+  function removeAnnotationRecord(sessionId: string, annotationId: string) {
+    const remove = (items: Annotation[] = []) => items.filter((item) => item.id !== annotationId);
+    setAnnotations((items) => remove(items));
+    setSessionBundle((current) =>
+      current?.session.id === sessionId
+        ? { ...current, annotations: remove(current.annotations) }
+        : current
+    );
+    setRecent((items) =>
+      items.map((item) =>
+        item.session.id === sessionId
+          ? { ...item, annotations: remove(item.annotations) }
+          : item
+      )
+    );
+  }
+
   async function importPublicDomainBook(book: PublicDomainBook) {
     try {
       const text = await publicDomainProvider.downloadText(book);
@@ -2012,6 +2054,47 @@ export function App() {
     setAnnotations((items) => [...items.filter((item) => item.id !== annotation.id), annotation]);
     appendSessionRecord(sessionBundle.session.id, { annotations: [annotation] });
     setToast(note ? "小辞的批注已经留在这里。" : "小辞已经划线。");
+  }
+
+  async function updateXiaociAnnotation(annotation: Annotation, note: string): Promise<Annotation> {
+    if (!sessionBundle || annotation.author !== "xiaoci") throw new Error("ANNOTATION_READ_ONLY");
+    const manifest = sessionBundle.session.sourceManifest;
+    if (!manifest) throw new Error("ANNOTATION_SOURCE_MISSING");
+    const result = await callTool("update_annotation", {
+      sessionId: sessionBundle.session.id,
+      annotationId: annotation.id,
+      note,
+      sourceHash: manifest.contentHash,
+      segmentationVersion: manifest.segmentationVersion,
+      operationId: crypto.randomUUID()
+    });
+    const updated = result.structuredContent?.annotation as Annotation | undefined;
+    if (!updated) {
+      setToast("批注没有修改成功，请再试一次。");
+      throw new Error("ANNOTATION_UPDATE_FAILED");
+    }
+    replaceAnnotationRecord(sessionBundle.session.id, updated);
+    setToast("小辞的批注已经更新。");
+    return updated;
+  }
+
+  async function deleteXiaociAnnotation(annotation: Annotation): Promise<void> {
+    if (!sessionBundle || annotation.author !== "xiaoci") throw new Error("ANNOTATION_READ_ONLY");
+    const manifest = sessionBundle.session.sourceManifest;
+    if (!manifest) throw new Error("ANNOTATION_SOURCE_MISSING");
+    const result = await callTool("delete_annotation", {
+      sessionId: sessionBundle.session.id,
+      annotationId: annotation.id,
+      sourceHash: manifest.contentHash,
+      segmentationVersion: manifest.segmentationVersion,
+      operationId: crypto.randomUUID()
+    });
+    if (result.structuredContent?.deleted !== true) {
+      setToast("批注没有删除成功，请再试一次。");
+      throw new Error("ANNOTATION_DELETE_FAILED");
+    }
+    removeAnnotationRecord(sessionBundle.session.id, annotation.id);
+    setToast("小辞的划线与批注已经删除。");
   }
 
   async function saveQuote(content: string) {
@@ -2258,6 +2341,8 @@ export function App() {
             else void requestNovelSync(null);
           }}
           onCreateAnnotation={createXiaociAnnotation}
+          onUpdateAnnotation={updateXiaociAnnotation}
+          onDeleteAnnotation={deleteXiaociAnnotation}
           onFinish={finishToday}
           onFullscreen={() => void openFullscreenReader()}
           fullscreenLabel={readerImmersive ? "退出全屏" : "全屏阅读"}
@@ -2482,6 +2567,10 @@ function deriveSourceEndpointBase(): string {
   const match = window.location.pathname.match(/\/mcp\/([^/]+)/);
   if (!match) return "/source";
   return `/source/${match[1]}`;
+}
+
+function derivePublicDomainEndpointBase(): string {
+  return "/public-domain";
 }
 
 function buildLiveReadingOperationId(

@@ -5,7 +5,6 @@ export interface PublicDomainBook {
   language: string;
   description: string;
   coverUrl?: string;
-  textUrl: string;
 }
 
 export interface PublicDomainBookProvider {
